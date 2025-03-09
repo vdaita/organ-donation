@@ -3,18 +3,24 @@ from typing import Optional, Dict, Any, Tuple
 import numpy as np
 from blood_type_encode import encode, blood_types, decode, blood_type_donate_to
 from utils import generate_priority_scores
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 class PairedOrganDonationEnv(gym.Env):
     def __init__(self, num_pairs: int = 5):
         self.num_pairs = num_pairs
-        self.feature_dim = 9
+        self.feature_dim = 25
         
         # Define observation space
         self.observation_space = gym.spaces.Dict({
-            "pairs": gym.spaces.Box(low=0, high=1, shape=(num_pairs, self.feature_dim), dtype=np.int8),
+            "patients": gym.spaces.Box(low=0, high=1, shape=(num_pairs, self.feature_dim), dtype=np.int8),
             "matched_patients": gym.spaces.MultiBinary(num_pairs),
             "current_selection": gym.spaces.MultiBinary(num_pairs)
         })
+
+        self.patients = np.zeros((num_pairs, self.feature_dim), dtype=np.int8)
+        self.matched_patients = np.zeros(num_pairs, dtype=np.int8)
+        self.current_selection = np.zeros(num_pairs, dtype=np.int8)
 
         self.action_space = gym.spaces.Discrete(num_pairs + 1)
         self.steps_completed = 0
@@ -31,10 +37,11 @@ class PairedOrganDonationEnv(gym.Env):
             donor_1_type = np.random.choice(blood_types)
             donor_2_type = np.random.choice(blood_types)
             patient_organ = np.random.choice(["kidney", "liver"])
-            self.patients[pair] = encode(patient_type, patient_organ, donor_1_type, donor_2_type)
+            encoded_patient = encode(patient_type, patient_organ, donor_1_type, donor_2_type)
+            self.patients[pair] = encoded_patient
 
-        self.matched_patients = np.zeros(self.people, dtype=np.int8)
-        self.current_selection = np.zeros(self.people, dtype=np.int8)
+        self.matched_patients = np.zeros(self.num_pairs, dtype=np.int8)
+        self.current_selection = np.zeros(self.num_pairs, dtype=np.int8)
         self.steps_completed = 0
 
         observation = self._get_observation()
@@ -140,5 +147,4 @@ class PairedOrganDonationEnv(gym.Env):
         
     def render(self):
         """Visualize the current state"""
-        # Visualization implementation
         pass
