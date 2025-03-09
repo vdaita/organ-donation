@@ -28,9 +28,14 @@ class DecisionTransformer(nn.Module):
                 nn.init.zeros_(param)
 
     def forward(self, selected: torch.Tensor, current: torch.Tensor, patients: torch.Tensor):
+        selected, current, patients = selected.to(torch.bool), current.to(torch.int32), patients.to(torch.float32)
+        num_patients = patients.shape[-2]
+        selected = torch.cat([selected, torch.Tensor([False])], dim=0).to(torch.bool)
+        selected = selected.unsqueeze(0).repeat(num_patients + 1, 1)
+        
         embedded_patients = self.patient_embedding(patients) + self.token_type_embedding(current)
-        done_embedding_expanded = self.done_embedding[None, None, :].expand(embedded_patients.size(0), 1, -1)
-        embedded_patients = torch.cat([embedded_patients, done_embedding_expanded], dim=-1)
+        done_embedding_expanded = self.done_embedding.unsqueeze(0)
+        embedded_patients = torch.cat([embedded_patients, done_embedding_expanded], dim=0)
         x = self.encoder(embedded_patients, mask=~selected, is_causal=False)
         x = self.weighter(x)
         x = x.squeeze(-1)

@@ -128,7 +128,7 @@ class PairedOrganDonationEnv(gym.Env):
     def step(self, action):
         pair_idx = action
         reward = 0
-        selected_size = np.where(self.current_section == 1).count()
+        selected_size = np.where(self.current_selection == 1).count()
 
         if pair_idx == self.num_pairs or selected_size == self.max_cycle:
             elements = self.patients[np.where(self.current_selection == 1)]
