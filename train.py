@@ -102,7 +102,7 @@ class REINFORCE:
 
 if __name__ == "__main__":
     # Initialize the environment
-    env = PairedOrganDonationEnv(num_pairs=32, max_steps=16, in_features=8)
+    env = PairedOrganDonationEnv(num_pairs=32, max_steps=64, in_features=8)
     env._print_env()
 
     valid_cycles, ttc_matched_pairs = env.optimized_top_trading_cycle()
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     agent = REINFORCE(in_attr=8)
 
     # Training loop
-    num_episodes = 500
+    num_episodes = 2000
     rewards = []
     update_frequency = 10
 
