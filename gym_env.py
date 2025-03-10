@@ -1,11 +1,11 @@
 import gymnasium as gym
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
-from blood_type_encode import encode, blood_types, decode, blood_type_donate_to
+from blood_type_encode import encode, blood_types, decode, blood_type_donate_to, blood_type_receive_from
 from utils import generate_priority_scores
 from itertools import combinations
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import networkx as nx
 
 class PairedOrganDonationEnv(gym.Env):
     def __init__(self, num_pairs: int = 5, in_features: int = 25, max_steps: int = 32):
@@ -35,11 +35,9 @@ class PairedOrganDonationEnv(gym.Env):
         super().reset(seed=seed)
 
         for pair in range(self.num_pairs):
-            patient_type = np.random.choice(blood_types)
-            donor_1_type = np.random.choice(blood_types)
-            donor_2_type = np.random.choice(blood_types)
-            patient_organ = np.random.choice(["kidney", "liver"])
-            encoded_patient = encode(patient_type, patient_organ, donor_1_type, donor_2_type)
+            patient_type = np.random.choice(blood_types)         
+            donor_type = np.random.choice(blood_types)
+            encoded_patient = encode(patient_type, donor_type)
             self.patients[pair] = encoded_patient
 
         self.matched_patients = np.zeros(self.num_pairs, dtype=np.int8)
@@ -50,6 +48,11 @@ class PairedOrganDonationEnv(gym.Env):
         info = {}
         return observation, info
         
+    def _print_env(self):
+        for i in range(self.num_pairs):
+            patient, donor = decode(self.patients[i])
+            print(f"Patient {i + 1}: {patient} (Donor: {donor})")
+
     def _get_observation(self):
         return {
             "patients": self.patients,
@@ -58,102 +61,65 @@ class PairedOrganDonationEnv(gym.Env):
         }
     
     def _validate(self, elements):
-        # Each patient has the option of their donor being kidney or dual_donor liver
-        for mapping_int in range(pow(2, len(elements))):
-            mapping = np.binary_repr(mapping_int, width=len(elements))
-            mapping = [int(x) for x in mapping] 
-            donor_assignments = ["kidney" if x == 1 else "liver" for x in mapping]
-            
-            # Create pools of available donors by blood type
-            kidney_donors = []
-            liver_donors = []
-            
-            # Track each patient's need
-            patients = []
-            
-            # Collect all donors and patients from the current mapping
-            for donor_type, patient_data in zip(donor_assignments, elements):
-                patient_type, organ, donor_1_type, donor_2_type = decode(patient_data)
-                
-                # Add to donor pools based on assignment
-                if donor_type == "kidney":
-                    kidney_donors.append(donor_1_type)
-                else:  # donor_type == "liver"
-                    liver_donors.append(donor_1_type)
-                    liver_donors.append(donor_2_type)
-                
-                # Record patient needs
-                patients.append((patient_type, organ))
-            
-            # Try to match each patient with appropriate donors
-            all_matched = True
-            used_kidney_donors = []
-            used_liver_donors = []
-
-            scored_patients = generate_priority_scores(patients, strategy="rarity")
-            patients = [patient for patient, _ in scored_patients]
-            
-            for patient_type, organ, patient_idx in patients:
-                if organ == "kidney":
-                    # Find ONE compatible kidney donor
-                    donor_found = False
-                    for i, donor in enumerate(kidney_donors):
-                        if i not in used_kidney_donors and patient_type in blood_type_donate_to[donor]:
-                            used_kidney_donors.append(i)
-                            donor_found = True
-                            break
-                    
-                    if not donor_found:
-                        all_matched = False
-                        break
-                        
-                else:  # organ == "liver"
-                    # Find TWO compatible liver donors
-                    donor_count = 0
-                    for i, donor in enumerate(liver_donors):
-                        if i not in used_liver_donors and patient_type in blood_type_donate_to[donor]:
-                            used_liver_donors.append(i)
-                            donor_count += 1
-                            if donor_count == 2:
-                                break
-                    
-                    if donor_count < 2:
-                        all_matched = False
-                        break
-            
-            # If all patients were matched, this is a valid mapping
-            if all_matched:
-                return True
-        
-        return False
+        valid_cycles, matched_pairs = self.simple_top_trading_cycle(elements)
+        return np.sum(matched_pairs) == len(elements)
     
-    def brute_force_solve(self):
-        def generate_combinations(n, max_size):
-            all_combinations = []
-            for size in range(1, max_size + 1):
-                all_combinations.extend(combinations(range(n), size))
-            return all_combinations
+    def simple_top_trading_cycle(self, elements=None):
+        """
+        Implementation of the Top Trading Cycle algorithm using NetworkX.
+        
+        Returns:
+            List of cycles representing valid exchanges and the matched pairs
+        """
+        if elements is None:
+            elements = self.patients
 
-        valid_solutions = []
-        # Rename this variable to avoid shadowing the imported function
-        possible_combinations = generate_combinations(self.num_pairs, self.max_cycle)
-        
-        for combo in possible_combinations:
-            test_selection = np.zeros(self.num_pairs, dtype=np.int8)
-            test_selection[list(combo)] = 1
-            elements = self.patients[np.where(test_selection == 1)]
+        num_pairs = len(elements)
+
+        remaining_pairs = set(range(num_pairs))
+        valid_cycles = []
+        matched_pairs = np.zeros(num_pairs, dtype=np.int8)
+
+        while remaining_pairs:
+            # Build directed graph using NetworkX
+            G = nx.DiGraph()
+            G.add_nodes_from(remaining_pairs)
             
-            if self._validate(elements):
-                decoded = [decode(patient) for patient in elements]
-                valid_solutions.append(decoded)
+            # Add all possible compatibility edges
+            for i in remaining_pairs:
+                patient_i_type, _ = decode(elements[i])
                 
-        print("Valid solutions found:")
-        for i, solution in enumerate(valid_solutions):
-            print(f"\nSolution {i + 1}:")
-            for patient in solution:
-                print(f"Patient blood: {patient[0]}, Organ: {patient[1]}, Donor1: {patient[2]}, Donor2: {patient[3]}")
+                # Find all compatible donors (not just the first one)
+                for j in remaining_pairs:
+                    if i != j:
+                        _, donor_j_type = decode(elements[j])
+                        if patient_i_type in blood_type_donate_to[donor_j_type]:
+                            G.add_edge(i, j)
+            
+            # Try to find cycles in the graph
+            try:
+                # Look for simple cycles in the directed graph
+                cycles = list(nx.simple_cycles(G))
+                
+                if not cycles:
+                    break
+                    
+                # Take the shortest cycle (generally more likely to be feasible)
+                cycle_nodes = min(cycles, key=len)
+                
+                # Add cycle to results and remove from remaining pairs
+                valid_cycles.append(cycle_nodes)
+                for pair_id in cycle_nodes:
+                    matched_pairs[pair_id] = 1
+                    remaining_pairs.remove(pair_id)
+                    
+            except nx.NetworkXNoCycle:
+                break  # No more cycles found
+            except Exception as e:
+                print(f"Error finding cycles: {e}")
+                break
         
-        return valid_solutions
+        return valid_cycles, matched_pairs
 
     def step(self, action):
         # print("Action: ", action)

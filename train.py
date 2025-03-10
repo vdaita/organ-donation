@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from model import DecisionTransformer
 from gym_env import PairedOrganDonationEnv
 import random
+from blood_type_encode import decode
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -23,7 +24,7 @@ def get_device():
 class REINFORCE:
     """REINFORCE algorithm, from Gymnasium Documentation"""
 
-    def __init__(self):
+    def __init__(self, in_attr: int = 25):
         """Initializes an agent that learns a policy via REINFORCE algorithm [1]
         to solve the task at hand.
 
@@ -41,7 +42,7 @@ class REINFORCE:
         self.rewards = []  # stores the rewards
 
         self.device = get_device()
-        self.net = DecisionTransformer(n_attr=25, hidden_dim=128, n_heads=8, n_layers=2).to(self.device)
+        self.net = DecisionTransformer(n_attr=in_attr, hidden_dim=128, n_heads=8, n_layers=2).to(self.device)
         self.optimizer = torch.optim.AdamW(self.net.parameters(), lr=self.learning_rate)
 
     def sample_action(self, obs: dict) -> float:
@@ -101,15 +102,27 @@ class REINFORCE:
 
 if __name__ == "__main__":
     # Initialize the environment
-    env = PairedOrganDonationEnv(num_pairs=8, max_steps=16)
-    env.brute_force_solve()
+    env = PairedOrganDonationEnv(num_pairs=4, max_steps=16, in_features=8)
+    env._print_env()
+    env.simple_top_trading_cycle()
+
+    valid_cycles, matched_pairs = env.simple_top_trading_cycle()
+    print("Valid cycles: ", valid_cycles)
+    for cycle in valid_cycles:
+        cycle_text = "Cycle: "
+        for patient in cycle:
+            patient_type, donor_type = decode(env.patients[patient])
+            cycle_text += f"{patient_type} -> {donor_type}, "
+        print(cycle_text)
 
     # Initialize the agent
-    agent = REINFORCE()
+    agent = REINFORCE(in_attr=8)
 
     # Training loop
     num_episodes = 500
     rewards = []
+    update_frequency = 10  # Print updates every 50 episodes
+    
     for episode in tqdm(range(num_episodes)):
         obs, _ = env.reset()
         done = False
@@ -117,12 +130,22 @@ if __name__ == "__main__":
 
         while not done:
             action = agent.sample_action(obs)
+            
+            if episode % 50 == 0:
+                print("Action: ", action)
+
             obs, reward, done, _, _ = env.step(action.item())
             agent.rewards.append(reward)
             total_reward += reward
 
         rewards.append(total_reward)
         agent.update()
+
+        # Print periodic updates
+        if (episode + 1) % update_frequency == 0:
+            avg_reward = sum(rewards[-update_frequency:]) / update_frequency
+            print(f"\nEpisode {episode + 1}")
+            print(f"Average reward over last {update_frequency} episodes: {avg_reward:.2f}")
 
     # Plot the rewards
     plt.plot(rewards)
