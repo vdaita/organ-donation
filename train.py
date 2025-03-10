@@ -59,7 +59,7 @@ class REINFORCE:
         current_selection = torch.tensor(obs["current_selection"], dtype=torch.bool, device=self.device)
 
         action_probs = self.net(matched_patients, current_selection, patients) # already softmaxed
-        print("Probs: ", action_probs)
+        # print("Probs: ", action_probs)
 
         # Sample an action from the action probabilities
         m = torch.distributions.Categorical(action_probs)
@@ -79,7 +79,7 @@ class REINFORCE:
             running_g = R + self.gamma * running_g
             gs.insert(0, running_g)
 
-        deltas = torch.tensor(gs)
+        deltas = torch.tensor(gs, dtype=torch.float32, device=self.device)
 
         log_probs = torch.stack(self.probs)
 
