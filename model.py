@@ -49,7 +49,10 @@ class DecisionTransformer(nn.Module):
 
         x = self.weighter(x)
         x = x.squeeze(-1)
-        x[current] = -1e9
+
+        current = torch.cat([current, torch.Tensor([0]).to(current.device)], dim=0).to(torch.int32) # extend this to the last element
+        current_mask = current * -1e9
+        x = x + current_mask
 
         x = torch.softmax(x, dim=-1)
         return x

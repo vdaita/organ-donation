@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 class PairedOrganDonationEnv(gym.Env):
-    def __init__(self, num_pairs: int = 5):
+    def __init__(self, num_pairs: int = 5, in_features: int = 25, max_steps: int = 32):
         self.num_pairs = num_pairs
-        self.feature_dim = 25
+        self.feature_dim = in_features
+        self.max_steps = max_steps
         
         # Define observation space
         self.observation_space = gym.spaces.Dict({
@@ -91,7 +92,7 @@ class PairedOrganDonationEnv(gym.Env):
             scored_patients = generate_priority_scores(patients, strategy="rarity")
             patients = [patient for patient, _ in scored_patients]
             
-            for patient_type, organ in patients:
+            for patient_type, organ, patient_idx in patients:
                 if organ == "kidney":
                     # Find ONE compatible kidney donor
                     donor_found = False
@@ -135,22 +136,20 @@ class PairedOrganDonationEnv(gym.Env):
         if pair_idx == self.num_pairs or selected_size == self.max_cycle:
             print("Loop completed: ", self.steps_completed)
             elements = self.patients[np.where(self.current_selection == 1)]
-            self.current_selection = np.zeros(self.people, dtype=np.int8)
+            self.current_selection = np.zeros_like(self.current_selection)
             if self._validate(elements):
-                reward = np.where(self.matched_patients == 1).count()
+                reward = np.sum(self.matched_patients)
             elif self.steps_completed == self.max_cycle:
                 reward = -0.1
         else:
             if self.current_selection[pair_idx] == 1 or self.matched_patients[pair_idx] == 1:
-                print("Giving negative reward: ", pair_idx)
                 reward = -0.1
             else:
-                print("Marking as completed: ", pair_idx)
                 self.current_selection[pair_idx] = 1
 
         self.steps_completed += 1
 
-        return self._get_observation(), reward, False, (self.steps_completed == self.max_cycle), {}
+        return self._get_observation(), reward, False, (self.steps_completed == self.max_steps), {}
         
     def render(self):
         """Visualize the current state"""

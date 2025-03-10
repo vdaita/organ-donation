@@ -37,7 +37,7 @@ def generate_priority_scores(patients, strategy="random"):
             'AB+': 1.0,  # Most common and least restricted
         }
         
-        for patient_type, organ, idx in patients:
+        for idx, (patient_type, organ) in enumerate(patients):
             organ_factor = 1.5 if organ == "liver" else 1.0
             scores.append(((patient_type, organ, idx), rarity_scores[patient_type] * organ_factor))
     
