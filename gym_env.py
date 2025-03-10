@@ -29,16 +29,17 @@ class PairedOrganDonationEnv(gym.Env):
     
         self.max_cycle = 8
 
-        self.reset()
+        self.reset(reset_patients=True)
     
-    def reset(self, seed: Optional[int] = None) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+    def reset(self, seed: Optional[int] = None, reset_patients=False) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
         super().reset(seed=seed)
 
-        for pair in range(self.num_pairs):
-            patient_type = np.random.choice(blood_types)         
-            donor_type = np.random.choice(blood_types)
-            encoded_patient = encode(patient_type, donor_type)
-            self.patients[pair] = encoded_patient
+        if reset_patients:
+            for pair in range(self.num_pairs):
+                patient_type = np.random.choice(blood_types)         
+                donor_type = np.random.choice(blood_types)
+                encoded_patient = encode(patient_type, donor_type)
+                self.patients[pair] = encoded_patient
 
         self.matched_patients = np.zeros(self.num_pairs, dtype=np.int8)
         self.current_selection = np.zeros(self.num_pairs, dtype=np.int8)
@@ -61,81 +62,86 @@ class PairedOrganDonationEnv(gym.Env):
         }
     
     def _validate(self, elements):
-        valid_cycles, matched_pairs = self.simple_top_trading_cycle(elements)
+        valid_cycles, matched_pairs = self.optimized_top_trading_cycle(elements)
         return np.sum(matched_pairs) == len(elements)
     
-    def simple_top_trading_cycle(self, elements=None):
-        """
-        Implementation of the Top Trading Cycle algorithm using NetworkX.
-        
-        Returns:
-            List of cycles representing valid exchanges and the matched pairs
-        """
+    def optimized_top_trading_cycle(self, elements=None):
         if elements is None:
             elements = self.patients
 
         num_pairs = len(elements)
-
         remaining_pairs = set(range(num_pairs))
         valid_cycles = []
         matched_pairs = np.zeros(num_pairs, dtype=np.int8)
 
         while remaining_pairs:
-            # Build directed graph using NetworkX
             G = nx.DiGraph()
             G.add_nodes_from(remaining_pairs)
             
-            # Add all possible compatibility edges
+            # Add edges as before
             for i in remaining_pairs:
                 patient_i_type, _ = decode(elements[i])
-                
-                # Find all compatible donors (not just the first one)
                 for j in remaining_pairs:
                     if i != j:
                         _, donor_j_type = decode(elements[j])
                         if patient_i_type in blood_type_donate_to[donor_j_type]:
                             G.add_edge(i, j)
             
-            # Try to find cycles in the graph
+            # Look for a single cycle instead of all cycles
             try:
-                # Look for simple cycles in the directed graph
-                cycles = list(nx.simple_cycles(G))
-                
-                if not cycles:
+                # Find a single cycle efficiently
+                cycle_found = False
+                for node in remaining_pairs:
+                    try:
+                        # Find a cycle containing this node with limited length
+                        cycle = nx.find_cycle(G, source=node, orientation='original')
+                        cycle_nodes = [edge[0] for edge in cycle]
+                        cycle_found = True
+                        break
+                    except nx.NetworkXNoCycle:
+                        continue
+                    
+                if not cycle_found:
                     break
                     
-                # Take the shortest cycle (generally more likely to be feasible)
-                cycle_nodes = min(cycles, key=len)
-                
-                # Add cycle to results and remove from remaining pairs
+                # Process cycle as before
                 valid_cycles.append(cycle_nodes)
                 for pair_id in cycle_nodes:
                     matched_pairs[pair_id] = 1
                     remaining_pairs.remove(pair_id)
                     
-            except nx.NetworkXNoCycle:
-                break  # No more cycles found
             except Exception as e:
                 print(f"Error finding cycles: {e}")
                 break
         
         return valid_cycles, matched_pairs
 
-    def step(self, action):
+    def step(self, action, should_print=False):
         # print("Action: ", action)
         pair_idx = action
         reward = 0
 
         selected_size = np.sum(self.current_selection)
 
-        if pair_idx == self.num_pairs or selected_size == self.max_cycle:
+        if should_print:
+            print("Action: ", action, " Current Selection: ", self.current_selection, " Matched: ", self.matched_patients)
+
+        if pair_idx == self.num_pairs or selected_size == self.max_cycle + 1:
             # print("Loop completed: ", self.steps_completed)
+            if not pair_idx == self.num_pairs:
+                self.current_selection[pair_idx] = 1
+
             elements = self.patients[np.where(self.current_selection == 1)]
-            self.current_selection = np.zeros_like(self.current_selection)
+
             if self._validate(elements):
-                reward = np.sum(self.matched_patients)
-            elif self.steps_completed == self.max_cycle:
+                reward = len(elements)
+                self.matched_patients[np.where(self.current_selection == 1)] = 1
+            else:
                 reward = -0.1
+            
+            self.current_selection = np.zeros_like(self.current_selection)
+            if should_print:
+                print("     Loop Completed - Reward: ", reward)
         else:
             if self.current_selection[pair_idx] == 1 or self.matched_patients[pair_idx] == 1:
                 reward = -0.1
@@ -144,7 +150,7 @@ class PairedOrganDonationEnv(gym.Env):
 
         self.steps_completed += 1
 
-        return self._get_observation(), reward, (self.steps_completed == self.max_steps), False, {}
+        return self._get_observation(), reward, (self.steps_completed == self.max_steps or np.sum(self.matched_patients) == self.num_pairs), False, {}
         
     def render(self):
         """Visualize the current state"""
