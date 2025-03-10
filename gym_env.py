@@ -126,12 +126,14 @@ class PairedOrganDonationEnv(gym.Env):
         return False
 
     def step(self, action):
+        print("Action: ", action)
         pair_idx = action
         reward = 0
 
         selected_size = np.sum(self.current_selection)
 
         if pair_idx == self.num_pairs or selected_size == self.max_cycle:
+            print("Loop completed: ", self.steps_completed)
             elements = self.patients[np.where(self.current_selection == 1)]
             self.current_selection = np.zeros(self.people, dtype=np.int8)
             if self._validate(elements):
@@ -140,9 +142,13 @@ class PairedOrganDonationEnv(gym.Env):
                 reward = -0.1
         else:
             if self.current_selection[pair_idx] == 1 or self.matched_patients[pair_idx] == 1:
+                print("Giving negative reward: ", pair_idx)
                 reward = -0.1
             else:
+                print("Marking as completed: ", pair_idx)
                 self.current_selection[pair_idx] = 1
+
+        self.steps_completed += 1
 
         return self._get_observation(), reward, False, (self.steps_completed == self.max_cycle), {}
         

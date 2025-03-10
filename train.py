@@ -6,6 +6,11 @@ import os
 import matplotlib.pyplot as plt
 from model import DecisionTransformer
 from gym_env import PairedOrganDonationEnv
+import random
+
+torch.manual_seed(42)
+np.random.seed(42)
+random.seed(42)
 
 def get_device():
     if torch.mps.is_available():
@@ -28,6 +33,9 @@ def train(model, env, num_episodes=1000, lr=1e-4, gamma=0.99, device=get_device(
         device: Device to run on
     """
     model = model.to(device)
+
+    print("Number of parameters:", sum(p.numel() for p in model.parameters() if p.requires_grad))
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
     # Track rewards
@@ -56,8 +64,9 @@ def train(model, env, num_episodes=1000, lr=1e-4, gamma=0.99, device=get_device(
             # Forward pass to get action
             action = model(matched_patients, current_selection, patients)
             
+            action_taken = torch.argmax(action).item()
             # Take step in environment 
-            next_observation, reward, terminated, truncated, _ = env.step(action.item())
+            next_observation, reward, terminated, truncated, _ = env.step(action_taken)
             done = terminated or truncated
             
             # Store rewards
