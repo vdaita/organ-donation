@@ -30,7 +30,8 @@ class DecisionTransformer(nn.Module):
     def forward(self, selected: torch.Tensor, current: torch.Tensor, patients: torch.Tensor):
         selected, current, patients = selected.to(torch.bool), current.to(torch.int32), patients.to(torch.float32)
         num_patients = patients.shape[-2]
-        selected = torch.cat([selected, torch.Tensor([False])], dim=0).to(torch.bool)
+
+        selected = torch.cat([selected, torch.Tensor([False]).to(selected.device)], dim=0).to(torch.bool)
         selected = selected.unsqueeze(0).repeat(num_patients + 1, 1)
         
         embedded_patients = self.patient_embedding(patients) + self.token_type_embedding(current)

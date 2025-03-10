@@ -7,7 +7,15 @@ import matplotlib.pyplot as plt
 from model import DecisionTransformer
 from gym_env import PairedOrganDonationEnv
 
-def train(model, env, num_episodes=1000, lr=1e-4, gamma=0.99, device='cuda' if torch.cuda.is_available() else 'cpu'):
+def get_device():
+    if torch.mps.is_available():
+        return 'mps'
+    elif torch.cuda.is_available():
+        return 'cuda'
+    else:
+        return 'cpu'
+
+def train(model, env, num_episodes=1000, lr=1e-4, gamma=0.99, device=get_device()):
     """
     Train the model using simple policy gradient approach
     
@@ -48,7 +56,7 @@ def train(model, env, num_episodes=1000, lr=1e-4, gamma=0.99, device='cuda' if t
             # Forward pass to get action
             action = model(matched_patients, current_selection, patients)
             
-            # Take step in environment
+            # Take step in environment 
             next_observation, reward, terminated, truncated, _ = env.step(action.item())
             done = terminated or truncated
             
