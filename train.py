@@ -102,6 +102,7 @@ class REINFORCE:
 if __name__ == "__main__":
     # Initialize the environment
     env = PairedOrganDonationEnv(num_pairs=8, max_steps=16)
+    env.brute_force_solve()
 
     # Initialize the agent
     agent = REINFORCE()

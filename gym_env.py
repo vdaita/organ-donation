@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, Tuple
 import numpy as np
 from blood_type_encode import encode, blood_types, decode, blood_type_donate_to
 from utils import generate_priority_scores
+from itertools import combinations
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
@@ -26,7 +27,7 @@ class PairedOrganDonationEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(num_pairs + 1)
         self.steps_completed = 0
     
-        self.max_cycle = 4
+        self.max_cycle = 8
 
         self.reset()
     
@@ -125,6 +126,34 @@ class PairedOrganDonationEnv(gym.Env):
                 return True
         
         return False
+    
+    def brute_force_solve(self):
+        def generate_combinations(n, max_size):
+            all_combinations = []
+            for size in range(1, max_size + 1):
+                all_combinations.extend(combinations(range(n), size))
+            return all_combinations
+
+        valid_solutions = []
+        # Rename this variable to avoid shadowing the imported function
+        possible_combinations = generate_combinations(self.num_pairs, self.max_cycle)
+        
+        for combo in possible_combinations:
+            test_selection = np.zeros(self.num_pairs, dtype=np.int8)
+            test_selection[list(combo)] = 1
+            elements = self.patients[np.where(test_selection == 1)]
+            
+            if self._validate(elements):
+                decoded = [decode(patient) for patient in elements]
+                valid_solutions.append(decoded)
+                
+        print("Valid solutions found:")
+        for i, solution in enumerate(valid_solutions):
+            print(f"\nSolution {i + 1}:")
+            for patient in solution:
+                print(f"Patient blood: {patient[0]}, Organ: {patient[1]}, Donor1: {patient[2]}, Donor2: {patient[3]}")
+        
+        return valid_solutions
 
     def step(self, action):
         # print("Action: ", action)
