@@ -44,25 +44,19 @@ class REINFORCE:
         self.device = get_device()
         self.net = DecisionTransformer(n_attr=in_attr, hidden_dim=128, n_heads=8, n_layers=2).to(self.device)
         self.optimizer = torch.optim.AdamW(self.net.parameters(), lr=self.learning_rate)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=500, gamma=0.5)
 
-    def sample_action(self, obs: dict) -> float:
-        """Returns an action, conditioned on the policy and observation.
-
-        Args:
-            state: Observation from the environment
-
-        Returns:
-            action: Action to be performed
-        """
-
+    def sample_action(self, obs: dict, temperature=0.6) -> float:
         patients = torch.tensor(obs["patients"], dtype=torch.float32, device=self.device)
         matched_patients = torch.tensor(obs["matched_patients"], dtype=torch.bool, device=self.device)
         current_selection = torch.tensor(obs["current_selection"], dtype=torch.bool, device=self.device)
 
-        action_probs = self.net(matched_patients, current_selection, patients) # already softmaxed
-        # print("Probs: ", action_probs)
-
-        # Sample an action from the action probabilities
+        action_probs = self.net(matched_patients, current_selection, patients)
+        
+        # Apply temperature
+        action_probs = action_probs ** (1/temperature)
+        action_probs = action_probs / action_probs.sum()
+        
         m = torch.distributions.Categorical(action_probs)
         action = m.sample()
         prob = m.log_prob(action)
@@ -71,30 +65,40 @@ class REINFORCE:
         return action
 
     def update(self):
-        """Updates the policy network's weights."""
         running_g = 0
         gs = []
 
-        # Discounted return (backwards) - [::-1] will return an array in reverse
+        # Calculate returns
         for R in self.rewards[::-1]:
             running_g = R + self.gamma * running_g
             gs.insert(0, running_g)
 
         deltas = torch.tensor(gs, dtype=torch.float32, device=self.device)
-
+        
+        # Add baseline subtraction
+        baseline = deltas.mean()
+        advantages = deltas - baseline
+        
         log_probs = torch.stack(self.probs)
-
-        # Calculate the mean of log probabilities for all actions in the episode
-        log_prob_mean = log_probs.mean()
-
-        # Update the loss with the mean log probability and deltas
-        # Now, we compute the correct total loss by taking the sum of the element-wise products.
-        loss = -torch.sum(log_prob_mean * deltas)
-
-        # Update the policy network
+        
+        # Add time-dependent weights
+        seq_length = log_probs.size(0)
+        time_weights = torch.exp(-torch.arange(seq_length, device=self.device) / (seq_length * 0.5))
+        # Normalize weights to sum to sequence length (preserves scale)
+        time_weights = time_weights * seq_length / time_weights.sum()
+        
+        # Apply time-dependent weighting to advantages
+        weighted_advantages = advantages * time_weights
+        loss = -torch.sum(log_probs * weighted_advantages)
+        
+        # Rest remains the same
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        
+        # Update learning rate
+        if hasattr(self, 'scheduler'):
+            self.scheduler.step()
 
         # Empty / zero out all episode-centric/related variables
         self.probs = []
@@ -102,7 +106,7 @@ class REINFORCE:
 
 if __name__ == "__main__":
     # Initialize the environment
-    env = PairedOrganDonationEnv(num_pairs=32, max_steps=64, in_features=8)
+    env = PairedOrganDonationEnv(num_pairs=64, max_steps=256, in_features=8)
     env._print_env()
 
     valid_cycles, ttc_matched_pairs = env.optimized_top_trading_cycle()
@@ -118,11 +122,13 @@ if __name__ == "__main__":
     agent = REINFORCE(in_attr=8)
 
     # Training loop
-    num_episodes = 2000
+    num_episodes = 250
     rewards = []
     update_frequency = 10
 
     max_rl_matched_pairs = 0
+    max_rl_matches = None
+
     for episode in tqdm(range(num_episodes)):
         obs, _ = env.reset()
         done = False
@@ -136,7 +142,10 @@ if __name__ == "__main__":
             obs, reward, done, _, _ = env.step(action.item(), should_print=should_print)
             agent.rewards.append(reward)
             total_reward += reward
-        max_rl_matched_pairs = max(max_rl_matched_pairs, np.sum(env.matched_patients))
+
+        if np.sum(env.matched_patients) > max_rl_matched_pairs:
+            max_rl_matches = env.matched_patients
+            max_rl_matched_pairs = np.sum(env.matched_patients)
 
         rewards.append(total_reward)
         agent.update()
@@ -149,6 +158,7 @@ if __name__ == "__main__":
 
     print("TTC number of matched pairs: ", np.sum(ttc_matched_pairs))
     print("Max RL Matched Pairs: ", max_rl_matched_pairs)
+    print("Max RL Matches: ", max_rl_matches)
 
     # Plot the rewards
     plt.plot(rewards)

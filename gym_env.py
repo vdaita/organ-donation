@@ -137,14 +137,14 @@ class PairedOrganDonationEnv(gym.Env):
                 reward = len(elements)
                 self.matched_patients[np.where(self.current_selection == 1)] = 1
             else:
-                reward = -0.1
+                reward = -0.01
             
             self.current_selection = np.zeros_like(self.current_selection)
             if should_print:
                 print("     Loop Completed - Reward: ", reward)
         else:
             if self.current_selection[pair_idx] == 1 or self.matched_patients[pair_idx] == 1:
-                reward = -0.1
+                reward = -0.01
             else:
                 self.current_selection[pair_idx] = 1
 
