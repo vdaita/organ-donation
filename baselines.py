@@ -1,11 +1,19 @@
-from environment import State
+from environment import PairedKidneyDonationEnv
+from gymnasium.spaces import Dict
+import numpy as np
 
-class BaselineMethod:
-    def __init__(self, wait_amount: int):
-        self.wait_amount = wait_amount
-    
-    def predict(self, state: State):
-        if state.time % self.wait_amount == 0:
-            return 1
-        else:
-            return 0
+# Greedy solution
+env = PairedKidneyDonationEnv()
+env.reset()
+done = False
+
+print("Optimal situation (in retrospect): ", env.get_theoretical_max())
+
+while not done:
+    action = {
+        "selection": np.zeros(env.n_agents),
+        "match_selection": 0,
+        "match_regular": 1
+    }
+    observation, reward, done, info = env.step(action)
+    print(reward)
