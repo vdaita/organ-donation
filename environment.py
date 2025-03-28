@@ -3,12 +3,23 @@ import numpy as np
 import networkx as nx
 from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscrete
 import matplotlib.pyplot as plt
+from typing import Tuple
+
+
+def generate_profile(n_agents) -> Tuple[Tuple, Tuple]:
+    blood_types = ['']
+
+def does_match(patient) -> bool:
+    ...
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, hard_match_pct=0.2, arrival_rate=1, departure_rate=1, criticality_rate=400, n_timesteps=700):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.34, arrival_rate=1, criticality_rate=400, n_timesteps=700):
         self.n_agents = n_agents
 
-        self.hard_match_pct = hard_match_pct
+        self.p = p
+        self.q = q
+        self.pct_hard = pct_hard
+
         self.arrival_rate = arrival_rate # agent arrives to market at time t (t dist. exponentially with mean a)
         self.criticality_rate = criticality_rate # agent arrives to market at time t, becomes critical after Z units of time (Z dist. exponentially with mean d)
         
@@ -37,20 +48,55 @@ class PairedKidneyDonationEnv(gym.Env):
 
         
     def reset(self):
-        self.compatibility = np.random.choice([0, 1], size=(self.n_agents, self.n_agents)) # make some agents hard to match as well
+        # Reset compatibility matrix
+        self.compatibility = np.zeros((self.n_agents, self.n_agents))
+        
+        # Identify agents that are hard to match (e.g., highly sensitized patients)
+        hard_to_match = np.random.choice(self.n_agents, int(self.n_agents * self.pct_hard), replace=False)
+        
+        # Generate compatibility edges
+        for i in range(self.n_agents):
+            for j in range(self.n_agents):
+                if i != j:  # No self-compatibility
+                    if i in hard_to_match and j in hard_to_match:
+                        # H-H pairs are never compatible
+                        self.compatibility[i, j] = 0
+                    elif i in hard_to_match or j in hard_to_match:
+                        # E-H pairs are compatible with probability p
+                        if np.random.rand() < self.p:
+                            self.compatibility[i, j] = 1
+                    else:
+                        # E-E pairs are compatible with probability q
+                        if np.random.rand() < self.q:
+                            self.compatibility[i, j] = 1
 
-        self.arrival_times = np.random.poisson(self.arrival_rate, size=self.n_agents)
-        self.real_departure_times = np.random.poisson(self.criticality_rate, size=self.n_agents)
+        # Generate arrivals using exponential distribution
+        self.arrival_times = np.zeros(self.n_agents, dtype=int)
+        inter_arrival_times = np.random.exponential(1.0/self.arrival_rate, self.n_agents)
+        cumulative_times = np.cumsum(inter_arrival_times)
+        scaled_times = (cumulative_times / np.max(cumulative_times) * (self.n_timesteps * 0.9)).astype(int)
+        self.arrival_times = np.clip(scaled_times, 0, self.n_timesteps-1)
+        
+        # Generate departure times based on arrival times plus criticality duration
+        criticality_durations = np.random.exponential(self.criticality_rate, self.n_agents)
+        self.real_departure_times = np.minimum((self.arrival_times + criticality_durations).astype(int), self.n_timesteps - 1)
 
-        self.active_agents = np.ones(self.n_agents)
+        self.active_agents = np.zeros(self.n_agents)
+        self.is_hard_to_match = np.zeros(self.n_agents)
+        self.is_hard_to_match[hard_to_match] = 1
+
+        print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
+        print(f"Average criticality duration: {np.mean(criticality_durations):.2f}")
+
+        print("Arrival times: ", self.arrival_times)
+        print("Departure times: ", self.real_departure_times)
 
         self.current_step = 0
         self.current_graph = nx.DiGraph()
-
         self.matched_pairs = 0
 
         return self.get_observation()
-    
+
     def get_observation(self):
         adj_matrix = np.zeros((self.n_agents, self.n_agents))
         for i in range(self.n_agents):
@@ -99,8 +145,10 @@ class PairedKidneyDonationEnv(gym.Env):
                 for u, v in best_priority_matching:
                     if self.current_graph.has_node(u):  # Check before removing
                         self.current_graph.remove_node(u)
+                        self.active_agents[u] = 0
                     if self.current_graph.has_node(v):  # Check before removing
                         self.current_graph.remove_node(v)
+                        self.active_agents[v] = 0
 
         if action["match_regular"] == 1:
             # Convert to undirected graph for matching
@@ -117,14 +165,17 @@ class PairedKidneyDonationEnv(gym.Env):
             for u, v in best_regular_matching:
                 if self.current_graph.has_node(u):  # Check before removing
                     self.current_graph.remove_node(u)
+                    self.active_agents[u] = 0
                 if self.current_graph.has_node(v):  # Check before removing
                     self.current_graph.remove_node(v)
+                    self.active_agents[v] = 0
 
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
 
         for agent_idx in new_arrivals:
             self.current_graph.add_node(agent_idx)
+            self.active_agents[agent_idx] = 1
             for other_agent in self.current_graph.nodes():
                 if other_agent != agent_idx:
                     if self.compatibility[agent_idx, other_agent] == 1:
@@ -135,16 +186,30 @@ class PairedKidneyDonationEnv(gym.Env):
         # remove the old departures
         departures = np.where(self.real_departure_times == self.current_step)[0]
         for agent_idx in departures:
-            self.current_graph.remove_node(agent_idx)
-            self.active_agents[agent_idx]
+            if agent_idx in self.current_graph.nodes():
+                self.current_graph.remove_node(agent_idx)
+                self.active_agents[agent_idx] = 0
 
         self.current_step += 1
 
         return self.get_observation(), self.get_reward(), self.current_step == self.n_timesteps, self.get_info()
 
     def get_info(self):
-        return {}
-    
+        num_hard_matched = sum([1 for i in range(self.n_agents) 
+                            if self.is_hard_to_match[i] == 1 and self.active_agents[i] == 0 
+                            and self.arrival_times[i] <= self.current_step])
+        num_hard_total = sum(self.is_hard_to_match)
+        
+        num_regular_matched = self.matched_pairs * 2 - num_hard_matched
+        num_regular_total = self.n_agents - num_hard_total
+        
+        return {
+            "hard_to_match_rate": num_hard_matched / max(1, num_hard_total),
+            "regular_match_rate": num_regular_matched / max(1, num_regular_total),
+            "active_agents": sum(self.active_agents),
+            "total_matched": self.matched_pairs * 2
+        }
+        
     def render(self):
         plt.imshow(self.get_observation()["adjacency_matrix"])
         plt.show()
