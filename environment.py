@@ -4,16 +4,10 @@ import networkx as nx
 from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscrete
 import matplotlib.pyplot as plt
 from typing import Tuple
-
-
-def generate_profile(n_agents) -> Tuple[Tuple, Tuple]:
-    blood_types = ['']
-
-def does_match(patient) -> bool:
-    ...
+import time
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.34, arrival_rate=1, criticality_rate=400, n_timesteps=700):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.7, arrival_rate=1, criticality_rate=400, n_timesteps=700):
         self.n_agents = n_agents
 
         self.p = p
@@ -48,6 +42,7 @@ class PairedKidneyDonationEnv(gym.Env):
 
         
     def reset(self):
+        start_time = time.time()
         # Reset compatibility matrix
         self.compatibility = np.zeros((self.n_agents, self.n_agents))
         
@@ -84,6 +79,9 @@ class PairedKidneyDonationEnv(gym.Env):
         self.active_agents = np.zeros(self.n_agents)
         self.is_hard_to_match = np.zeros(self.n_agents)
         self.is_hard_to_match[hard_to_match] = 1
+        end_time = time.time()
+
+        print(f"Environment reset time: {end_time - start_time:.2f} seconds")
 
         print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
         print(f"Average criticality duration: {np.mean(criticality_durations):.2f}")
@@ -96,6 +94,15 @@ class PairedKidneyDonationEnv(gym.Env):
         self.matched_pairs = 0
 
         return self.get_observation()
+
+    def start_over(self): # start over in a new environment with a similar setup
+        self.current_step = 0
+        self.current_graph = nx.DiGraph()
+        self.matched_pairs = 0
+
+        # Reset active agents and matched pairs
+        self.active_agents = np.zeros(self.n_agents)
+        self.matched_pairs = 0
 
     def get_observation(self):
         adj_matrix = np.zeros((self.n_agents, self.n_agents))

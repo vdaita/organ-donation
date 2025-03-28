@@ -3,7 +3,7 @@ from gymnasium.spaces import Dict
 import numpy as np
 
 # Greedy solution
-env = PairedKidneyDonationEnv(n_agents=1000, n_timesteps=50, criticality_rate=25)
+env = PairedKidneyDonationEnv(n_agents=2000, n_timesteps=50, criticality_rate=15)
 env.reset()
 done = False
 
