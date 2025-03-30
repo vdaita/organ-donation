@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscrete
 import matplotlib.pyplot as plt
-from typing import Tuple
+from typing import Tuple, Optional
 import time
 
 class PairedKidneyDonationEnv(gym.Env):
@@ -44,17 +44,19 @@ class PairedKidneyDonationEnv(gym.Env):
         self.matched_pairs = 0
 
         
-    def reset(self):
+    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed)
+        
         start_time = time.time()
         # Reset compatibility matrix
         self.compatibility = np.zeros((self.n_agents, self.n_agents))
         
         # Identify agents that are hard to match (e.g., highly sensitized patients)
-        hard_indices = np.random.choice(self.n_agents, int(self.n_agents * self.pct_hard), replace=False)
+        hard_indices = self.np_random.choice(self.n_agents, int(self.n_agents * self.pct_hard), replace=False)
         self.is_hard_to_match[hard_indices] = 1
         easy_indices = np.setdiff1d(np.arange(self.n_agents), hard_indices)
 
-        random_values = np.random.rand(self.n_agents, self.n_agents)
+        random_values = self.np_random.random((self.n_agents, self.n_agents))
 
         # Fill compatibility matrix based on hard/easy matching criteria
         self.compatibility[np.ix_(hard_indices, easy_indices)] = random_values[np.ix_(hard_indices, easy_indices)] < self.p  # Hard-to-Easy
@@ -65,25 +67,26 @@ class PairedKidneyDonationEnv(gym.Env):
 
         # Generate arrivals using exponential distribution
         self.arrival_times = np.zeros(self.n_agents, dtype=int)
-        inter_arrival_times = np.random.exponential(1.0/self.arrival_rate, self.n_agents)
+        inter_arrival_times = self.np_random.exponential(1.0/self.arrival_rate, self.n_agents)
         cumulative_times = np.cumsum(inter_arrival_times)
         scaled_times = (cumulative_times / np.max(cumulative_times) * (self.n_timesteps * 0.9)).astype(int)
         self.arrival_times = np.clip(scaled_times, 0, self.n_timesteps-1)
         
         # Generate departure times based on arrival times plus criticality duration
-        criticality_durations = np.random.exponential(self.criticality_rate, self.n_agents)
+        criticality_durations = self.np_random.exponential(self.criticality_rate, self.n_agents)
         self.real_departure_times = np.minimum((self.arrival_times + criticality_durations).astype(int), self.n_timesteps - 1)
 
         self.active_agents = np.zeros(self.n_agents)
         end_time = time.time()
 
-        print(f"Environment reset time: {end_time - start_time:.2f} seconds")
+        if options and "should_log" in options and options["should_log"]:
+            print(f"Environment reset time: {end_time - start_time:.2f} seconds")
 
-        print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
-        print(f"Average criticality duration: {np.mean(criticality_durations):.2f}")
+            print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
+            print(f"Average criticality duration: {np.mean(criticality_durations):.2f}")
 
-        print("Arrival times: ", self.arrival_times)
-        print("Departure times: ", self.real_departure_times)
+            print("Arrival times: ", self.arrival_times)
+            print("Departure times: ", self.real_departure_times)
 
         self.current_step = 0
         self.current_graph = nx.DiGraph()

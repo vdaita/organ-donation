@@ -4,6 +4,7 @@ import numpy as np
 from torch.distributions.normal import Normal
 import torch
 import gymnasium as gym
+from tqdm import tqdm
 
 env = PairedKidneyDonationEnv(
     n_agents=2000,
@@ -87,7 +88,7 @@ seed = 42
 
 agent = REINFORCE()
 reward_over_episodes = []
-for episode in range(total_episodes):
+for episode in tqdm(range(total_episodes)):
     obs, info = wrapped_env.reset(seed=seed)
     reward, done = 0, False
 
@@ -100,3 +101,6 @@ for episode in range(total_episodes):
 
     if (episode + 1) % 100 == 0:
         print(f"Episode {episode}: average reward = {np.mean(reward_over_episodes[-100:])}")
+
+wrapped_env.close()
+agent.model.save("reinforce_model.pth") # model is pretty small - doesn't need to be gitignored
