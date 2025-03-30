@@ -3,26 +3,50 @@ from gymnasium.spaces import Dict
 import numpy as np
 import time
 
-# Greedy solution
-env = PairedKidneyDonationEnv(n_agents=2000, n_timesteps=360, criticality_rate=50)
-env.reset()
-done = False
+def get_greedy_percentage(env: PairedKidneyDonationEnv):
+    obs, info = env.start_over()
+    reward, done = 0, False
+    while not done:
+        action = {
+            "selection": np.zeros(env.n_agents),
+            "match_selection": 0,
+            "match_regular": 1
+        }
+        observation, reward, done, info = env.step(action)
 
-print("Optimal situation (in retrospect): ", env.get_theoretical_max())
+    env.start_over()
+    return reward
 
-global_start_time = time.time()
-while not done:
-    start_time = time.time()
-    action = {
-        "selection": np.zeros(env.n_agents),
-        "match_selection": 0,
-        "match_regular": 1
-    }
-    observation, reward, done, info = env.step(action)
-    end_time = time.time()
-global_end_time = time.time()
+def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int):
+    done = False
+    obs, info = env.start_over()
+    reward, done = 0, False
+    while not done:
+        if env.current_timestep % period_timesteps == 0:
+            action = {
+                "selection": np.zeros(env.n_agents),
+                "match_selection": 0,
+                "match_regular": 1
+            }
+            observation, reward, done, info = env.step(action)
+        else:
+            action = {
+                "selection": np.zeros(env.n_agents),
+                "match_selection": 0,
+                "match_regular": 1
+            }
+            observation, reward, done, info = env.step(action)
+    env.start_over()
+    return reward
 
-print("-> Greedy solution")
-print("Time taken: ", global_end_time - global_start_time, " Last reward: ", reward, " Hard to match rate: ", info["hard_to_match_rate"], " Easy to match rate: ", info["regular_match_rate"])
+if __name__ == "__main__":
+    env = PairedKidneyDonationEnv(
+        n_agents=2000,
+        n_timesteps=360,
+        criticality_rate=180
+    )
+    greedy_reward = get_greedy_percentage(env)
+    print(f"Greedy reward: {greedy_reward}")
 
-# Time period solution
+    periodic_reward = get_periodic_percentage(env, period_timesteps=30)
+    print(f"Periodic reward: {periodic_reward}")

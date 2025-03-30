@@ -93,7 +93,7 @@ class PairedKidneyDonationEnv(gym.Env):
         self.matched_pairs = 0
         self.theoretical_max = self.get_theoretical_max()
 
-        return self.get_observation()
+        return self.get_observation(), self.get_info()
 
     def start_over(self): # start over in a new environment with a similar setup
         self.current_step = 0
@@ -106,6 +106,7 @@ class PairedKidneyDonationEnv(gym.Env):
         # Reset active agents and matched pairs
         self.active_agents = np.zeros(self.n_agents)
         self.matched_pairs = 0
+        return self.get_observation(), self.get_info()
 
     def get_observation(self):
         return {
