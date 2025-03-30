@@ -5,23 +5,26 @@ from torch.distributions.normal import Normal
 import torch
 import gymnasium as gym
 from tqdm import tqdm
+from baselines import get_greedy_percentage, get_periodic_percentage
 
 env = PairedKidneyDonationEnv(
-    n_agents=2000,
-    n_timesteps=360 // 10,
-    criticality_rate=180 // 10
+    n_agents=500,
+    n_timesteps=36,
+    criticality_rate=18
 )
 
 class REINFORCE:
-    def __init__(self, device="mps"):
-        self.learning_rate = 1e-4
+    def __init__(self, device="cpu", model=None):
+        self.learning_rate = 1e-5
         self.gamma = 0.99
-        self.eps = 1e-6
         
-        self.model = PairedKidneyModel(
-            hidden_dim=32,
-            num_layers=6
-        )
+        if not model:
+            self.model = PairedKidneyModel(
+                hidden_dim=32,
+                num_layers=6
+            )
+        else:
+            self.model = model
         print("Number of parameters: ", sum(p.numel() for p in self.model.parameters()))
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.device = torch.device(device)
@@ -67,13 +70,14 @@ class REINFORCE:
             "match_regular": match_global
         }
 
-    def update(self, reward: torch.Tensor) -> None:
+    def update(self, reward) -> None:
+        reward_tensor = torch.tensor(reward, dtype=torch.float32, device=self.device)
         log_probs = torch.stack(self.probs)
         log_probs_mean = log_probs.mean(dim=0)
 
-        print(log_probs.shape, log_probs_mean.shape, reward)
+        # print(log_probs.shape, log_probs_mean.shape, reward)
         
-        loss = -torch.mean(log_probs_mean) * reward
+        loss = -torch.mean(log_probs_mean) * reward_tensor
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -81,31 +85,78 @@ class REINFORCE:
 
         self.probs = []
 
-wrapped_env = gym.wrappers.RecordEpisodeStatistics(
-    env,
-    50
-)
 
+# MPS has some issues when trying to compute the loss
+
+# training constants
 total_episodes = 2000
-seed = 42
+imitation_episodes = 100
+greedy_eval_lookback = 4
+eval_period = 20
 
-agent = REINFORCE(
-    device="cpu" # faster on CPU - probably because less transfers
+# Imitation learning
+
+
+basic_model = PairedKidneyModel(
+    hidden_dim=32,
+    num_layers=6
 )
+basic_optimizer = torch.optim.Adam(basic_model.parameters(), lr=1e-4)
+
+for i in tqdm(range(imitation_episodes)):
+    obs, info = env.reset()
+    reward, done = 0, False
+
+    while not done:
+        action = {
+            "selection": np.zeros(env.n_agents),
+            "match_selection": 0,
+            "match_regular": 1
+        }
+        observation, reward, done, _, info = env.step(action)
+        
+        adj_matrix = torch.Tensor(observation["adjacency_matrix"])
+        timestep = torch.Tensor([observation["timestep"]])
+        
+        item_priority, match_priority, match_global = basic_model(adj_matrix, timestep)
+        loss = torch.mean((item_priority - 1) ** 2 + (match_priority - 1) ** 2 + (match_global - 1) ** 2)
+        
+        basic_optimizer.zero_grad()
+        loss.backward()
+        basic_optimizer.step()
+        
+    if (i + 1) % 50 == 0:
+        print(f"Imitation episode {i + 1}: loss = {loss.item()}")
+    
+agent = REINFORCE(
+    device="cpu", # faster on CPU - probably because less transfers
+    model=basic_model
+)
+
+# Reinforcement learning 
 reward_over_episodes = []
+recent_greedy_rewards = []
+
+
 for episode in tqdm(range(total_episodes)):
-    obs, info = wrapped_env.reset(seed=seed)
+    obs, info = env.reset()
     reward, done = 0, False
 
     while not done:
         action = agent.sample_action(obs)
-        observation, reward, done, _, info = wrapped_env.step(action)
+        observation, reward, done, _, info = env.step(action)
     
     agent.update(reward)
     reward_over_episodes.append(reward)
+    
+    if ((episode + 1) % eval_period) in list(range(eval_period - greedy_eval_lookback, eval_period)):
+        recent_greedy_rewards.append(get_greedy_percentage(env))
 
-    if (episode + 1) % 100 == 0:
-        print(f"Episode {episode}: average reward = {np.mean(reward_over_episodes[-100:])}")
+    if (episode + 1) % eval_period == 0:        
+        mean_greedy_reward = np.mean(recent_greedy_rewards)
+        recent_greedy_rewards = []
+        print(f"Episode {episode}: average reward = {np.mean(reward_over_episodes[-greedy_eval_lookback:])}, greedy reward = {mean_greedy_reward}")
+        
 
-wrapped_env.close()
+env.close()
 agent.model.save("reinforce_model.pth") # model is pretty small - doesn't need to be gitignored

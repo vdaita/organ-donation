@@ -2,8 +2,9 @@ from environment import PairedKidneyDonationEnv
 from gymnasium.spaces import Dict
 import numpy as np
 import time
+import gymnasium as gym
 
-def get_greedy_percentage(env: PairedKidneyDonationEnv):
+def get_greedy_percentage(env: PairedKidneyDonationEnv): # easier to test with PairedKidneyDonationEnv directly
     obs, info = env.start_over()
     reward, done = 0, False
     while not done:
@@ -17,6 +18,7 @@ def get_greedy_percentage(env: PairedKidneyDonationEnv):
     env.start_over()
     return reward
 
+# TODO: test this function
 def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int):
     done = False
     obs, info = env.start_over()
