@@ -209,8 +209,9 @@ class PairedKidneyDonationEnv(gym.Env):
                 self.active_agents[agent_idx] = 0
 
         self.current_step += 1
+        done = self.current_step == self.n_timesteps
 
-        return self.get_observation(), self.get_reward(), self.current_step == self.n_timesteps, self.get_info()
+        return self.get_observation(), self.get_reward(), done, done, self.get_info()
     
     def get_info(self):
         num_hard_matched = sum([1 for i in range(self.n_agents) 

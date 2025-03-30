@@ -12,7 +12,7 @@ def get_greedy_percentage(env: PairedKidneyDonationEnv):
             "match_selection": 0,
             "match_regular": 1
         }
-        observation, reward, done, info = env.step(action)
+        observation, reward, done, _, info = env.step(action)
 
     env.start_over()
     return reward
@@ -35,7 +35,7 @@ def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int)
                 "match_selection": 0,
                 "match_regular": 1
             }
-            observation, reward, done, info = env.step(action)
+            observation, reward, done, _,  info = env.step(action)
     env.start_over()
     return reward
 

@@ -8,8 +8,8 @@ from tqdm import tqdm
 
 env = PairedKidneyDonationEnv(
     n_agents=2000,
-    n_timesteps=360,
-    criticality_rate=180
+    n_timesteps=360 // 10,
+    criticality_rate=180 // 10
 )
 
 class REINFORCE:
@@ -69,9 +69,12 @@ class REINFORCE:
 
     def update(self, reward: torch.Tensor) -> None:
         log_probs = torch.stack(self.probs)
-        log_probs_mean = log_probs.mean()
-        rewards = self.reward
-        loss = -torch.sum(log_probs_mean * rewards)
+        log_probs_mean = log_probs.mean(dim=0)
+
+        print(log_probs.shape, log_probs_mean.shape, reward)
+        
+        loss = -torch.mean(log_probs_mean) * reward
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -86,7 +89,9 @@ wrapped_env = gym.wrappers.RecordEpisodeStatistics(
 total_episodes = 2000
 seed = 42
 
-agent = REINFORCE()
+agent = REINFORCE(
+    device="cpu" # faster on CPU - probably because less transfers
+)
 reward_over_episodes = []
 for episode in tqdm(range(total_episodes)):
     obs, info = wrapped_env.reset(seed=seed)
@@ -94,7 +99,7 @@ for episode in tqdm(range(total_episodes)):
 
     while not done:
         action = agent.sample_action(obs)
-        observation, reward, done, info = wrapped_env.step(action)
+        observation, reward, done, _, info = wrapped_env.step(action)
     
     agent.update(reward)
     reward_over_episodes.append(reward)
