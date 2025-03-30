@@ -32,7 +32,7 @@ class PairedKidneyModel(nn.Module):
         node_embeddings = node_embeddings + time_embed.unsqueeze(0)
         
         item_priority = torch.sigmoid(self.item_priority_fc(node_embeddings))
-        graph_embedding = global_mean_pool(node_embeddings)
+        graph_embedding = global_mean_pool(node_embeddings, batch=torch.zeros(num_nodes, dtype=torch.long, device=adj_matrix.device))
 
         match_priority = torch.sigmoid(self.match_priority(graph_embedding))
         match_global = torch.sigmoid(self.match_global(graph_embedding))

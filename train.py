@@ -37,10 +37,6 @@ class REINFORCE:
         timestep = timestep.to(self.device)
 
         item_priority, match_priority, match_global = self.model(adj_matrix, timestep)
-       
-        item_priority = item_priority.cpu().detach().numpy()
-        match_priority = match_priority.cpu().detach().numpy()
-        match_global = match_global.cpu().detach().numpy()
 
         item_priority_distrib = Normal(item_priority, 0.1)
         match_priority_distrib = Normal(match_priority, 0.1)
@@ -50,21 +46,25 @@ class REINFORCE:
         match_priority = match_priority_distrib.sample()
         match_global = match_global_distrib.sample()
 
-        # after you've sampled values from the distribution, you have to align them to 0 or 1 for each of them
-        item_priority = (item_priority > 0.5).to(dtype=torch.int)
-        match_priority = (match_priority > 0.5).to(dtype=torch.int)
-        match_global = (match_global > 0.5).to(dtype=torch.int)
-
-        self.probs.append(torch.Tensor([
-            item_priority_distrib.log_prob(item_priority),
-            match_priority_distrib.log_prob(match_priority),
-            match_global_distrib.log_prob(match_global)
+        self.probs.append(torch.cat([
+            item_priority_distrib.log_prob(item_priority).flatten(),
+            match_priority_distrib.log_prob(match_priority).flatten(),
+            match_global_distrib.log_prob(match_global).flatten()
         ]))
 
+        item_priority = item_priority.cpu().detach().numpy()
+        match_priority = match_priority.cpu().detach().numpy()
+        match_global = match_global.cpu().detach().numpy()
+
+        # after you've sampled values from the distribution, you have to align them to 0 or 1 for each of them
+        item_priority = (item_priority > 0.5).astype(np.int32)
+        match_priority = (match_priority > 0.5).astype(np.int32)
+        match_global = (match_global > 0.5).astype(np.int32)
+
         return {
-            "selection": item_priority.detach().cpu().numpy(),
-            "match_selection": match_priority.detach().cpu().numpy(),
-            "match_regular": match_global.detach().cpu().numpy()
+            "selection": item_priority,
+            "match_selection": match_priority,
+            "match_regular": match_global
         }
 
     def update(self, reward: torch.Tensor) -> None:
