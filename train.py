@@ -8,7 +8,7 @@ from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage
 
 env = PairedKidneyDonationEnv(
-    n_agents=500,
+    n_agents=250,
     n_timesteps=36,
     criticality_rate=18
 )
@@ -90,16 +90,17 @@ class REINFORCE:
 
 # training constants
 total_episodes = 2000
-imitation_episodes = 100
+imitation_episodes = 10
 greedy_eval_lookback = 4
 eval_period = 20
+batch_size = 16
 
 # Imitation learning
 
 
 basic_model = PairedKidneyModel(
-    hidden_dim=32,
-    num_layers=6
+    hidden_dim=16,
+    num_layers=8
 )
 basic_optimizer = torch.optim.Adam(basic_model.parameters(), lr=1e-4)
 
@@ -119,14 +120,13 @@ for i in tqdm(range(imitation_episodes)):
         timestep = torch.Tensor([observation["timestep"]])
         
         item_priority, match_priority, match_global = basic_model(adj_matrix, timestep)
-        loss = torch.mean((item_priority - 1) ** 2 + (match_priority - 1) ** 2 + (match_global - 1) ** 2)
+        loss = torch.mean((item_priority) ** 2 + (match_priority) ** 2 + (match_global - 1) ** 2)
         
         basic_optimizer.zero_grad()
         loss.backward()
         basic_optimizer.step()
         
-    if (i + 1) % 50 == 0:
-        print(f"Imitation episode {i + 1}: loss = {loss.item()}")
+print(f"Greedy imitation loss = {loss.item()}")
     
 agent = REINFORCE(
     device="cpu", # faster on CPU - probably because less transfers
@@ -137,6 +137,7 @@ agent = REINFORCE(
 reward_over_episodes = []
 recent_greedy_rewards = []
 
+recent_rewards = []
 
 for episode in tqdm(range(total_episodes)):
     obs, info = env.reset()
@@ -146,8 +147,12 @@ for episode in tqdm(range(total_episodes)):
         action = agent.sample_action(obs)
         observation, reward, done, _, info = env.step(action)
     
-    agent.update(reward)
     reward_over_episodes.append(reward)
+    recent_rewards.append(reward)
+
+    if len(recent_rewards) > batch_size:
+        agent.update(np.mean(recent_rewards))
+        recent_rewards = []
     
     if ((episode + 1) % eval_period) in list(range(eval_period - greedy_eval_lookback, eval_period)):
         recent_greedy_rewards.append(get_greedy_percentage(env))
@@ -159,4 +164,5 @@ for episode in tqdm(range(total_episodes)):
         
 
 env.close()
-agent.model.save("reinforce_model.pth") # model is pretty small - doesn't need to be gitignored
+
+torch.save(agent.model.state_dict(), "model.pth")
