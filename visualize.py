@@ -21,6 +21,7 @@ def make_graph(SHOW_OPTIMAL=True):
             periodic_rewards = [res for res in result["results"] if res["type"]["method"] == "periodic"]
             mixed_rewards = [res for res in result["results"] if res["type"]["method"] == "mixed"]
             patient_reward = [res for res in result["results"] if res["type"]["method"] == "patient"][0]["reward"]
+            greedy_patient_mixed_reward = [res for res in result["results"] if res["type"]["method"] == "greedy-patient-mixed"][0]["reward"]
 
 
             for periodic_reward in periodic_rewards:
@@ -40,6 +41,10 @@ def make_graph(SHOW_OPTIMAL=True):
             if "patient" not in aggregated_results:
                 aggregated_results["patient"] = []
             aggregated_results["patient"].append(patient_reward / greedy_reward)
+
+            if "greedy-patient-mixed" not in aggregated_results:
+                aggregated_results["greedy-patient-mixed"] = []
+            aggregated_results["greedy-patient-mixed"].append(greedy_patient_mixed_reward / greedy_reward)
             
             if SHOW_OPTIMAL:
                 if "retrospective-optimal" not in aggregated_results:

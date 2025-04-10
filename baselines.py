@@ -82,6 +82,24 @@ def get_patient_percentage(env: PairedKidneyDonationEnv):
     env.start_over()
     return reward   
 
+def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
+    obs, info = env.start_over()
+    reward, done = 0, False
+    while not done:
+        # check if there are any elements that are just before the timestep when they depart? or they are hard to match?
+        selection = np.zeros(env.n_agents)
+        for i in range(env.n_agents):
+            if env.real_departure_times[i] - env.current_step == 1 or env.is_hard_to_match[i] == 1:
+                selection[i] = 1
+        action = {
+            "selection": selection,
+            "match_selection": 1,
+            "match_regular": 0
+        }
+        observation, reward, done, _, info = env.step(action)
+    env.start_over()
+    return reward
+
 if __name__ == "__main__":
     periods = [2, 4, 7] # when 180 timesteps and 90 criticality rate, each day represents 4 days
     # twice a week, once every 2 weeks, once a month (roughly)
@@ -118,6 +136,13 @@ if __name__ == "__main__":
                     "method": "patient"
                 },
                 "reward": get_patient_percentage(env)
+            })
+
+            simulation_result["results"].append({
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": get_greedy_patient_mixed(env)
             })
 
             for period in tqdm(periods, desc="Periods", leave=False):

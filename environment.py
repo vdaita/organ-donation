@@ -114,7 +114,11 @@ class PairedKidneyDonationEnv(gym.Env):
     def get_observation(self):
         return {
             "adjacency_matrix": nx.adjacency_matrix(self.current_graph).toarray() if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
-            "timestep": self.current_step
+            "timestep": self.current_step,
+            "arrivals": self.arrival_times,
+            "departures": self.real_departure_times,
+            "is_hard_to_match": self.is_hard_to_match,
+            "active_agents": self.active_agents
         }
     
     def get_reward(self):

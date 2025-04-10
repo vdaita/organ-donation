@@ -2,6 +2,7 @@ from torch_geometric.nn import GAT, global_mean_pool
 from torch import nn
 import torch
 import torch.nn.functional as F
+import numpy as np
 
 class PairedKidneyModel(nn.Module):
     def __init__(self, hidden_dim, num_layers=3):
@@ -9,32 +10,63 @@ class PairedKidneyModel(nn.Module):
         
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim, num_layers=num_layers)
-        
-        self.time_embedding = nn.Sequential(
-            nn.Linear(1, hidden_dim),
-            nn.SiLU(),
+
+        self.embedding = nn.Sequential(
+            nn.Linear(2, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
+        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim, num_layers=num_layers)
+        self.select_fc = nn.Linear(hidden_dim, 1)
         
-        self.item_priority_fc = nn.Linear(hidden_dim, 1)
-        self.match_priority = nn.Linear(hidden_dim, 1)
-        self.match_global = nn.Linear(hidden_dim, 1)
 
-    def forward(self, adj_matrix, timestep):
-        num_nodes = adj_matrix.size(0)
-        
-        x = torch.ones(num_nodes, self.hidden_dim, device=adj_matrix.device)
-        edge_index = adj_matrix.nonzero().t().contiguous()
-        node_embeddings = self.gat(x, edge_index)
-        
-        time_embed = self.time_embedding(timestep.view(1, 1)).squeeze(0)
-        node_embeddings = node_embeddings + time_embed.unsqueeze(0)
-        
-        item_priority = torch.sigmoid(self.item_priority_fc(node_embeddings))
-        graph_embedding = global_mean_pool(node_embeddings, batch=torch.zeros(num_nodes, dtype=torch.long, device=adj_matrix.device))
+    def reset_parameters(self):
+        for layer in self.embedding:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        self.gat.reset_parameters()
+        nn.init.xavier_uniform_(self.select_fc.weight)
+        if self.select_fc.bias is not None:
+            nn.init.zeros_(self.select_fc.bias)
 
-        match_priority = torch.sigmoid(self.match_priority(graph_embedding))
-        match_global = torch.sigmoid(self.match_global(graph_embedding))
-        
-        return item_priority, match_priority, match_global
+    def forward(self, adj_matrix, timestep, arrival, departure, is_hard_to_match, mask):    
+        try:
+            masked_indices = torch.nonzero(mask, as_tuple=False).squeeze()
+            num_active = masked_indices.size(0)            
+            relevant_nodes = adj_matrix[masked_indices]
+            relevant_arrivals = arrival[masked_indices]
+            relevant_departures = departure[masked_indices]
+            # print("timestamp: ", timestep)
+            timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
+
+            # print("Input values to next stage: ", " nodes: ", relevant_nodes,  " arrivals: ", relevant_arrivals, " departures: ", relevant_departures, " timestep: ", timestep_expanded)    
+
+            relevant_progress = (timestep_expanded - relevant_arrivals) / (relevant_departures - relevant_arrivals)
+            
+            # print("Relevant progress: ", relevant_progress.shape, relevant_progress)
+            # print("Is hard to match: ", is_hard_to_match[masked_indices].shape, is_hard_to_match[masked_indices])
+            in_data = torch.concat([
+                relevant_progress.unsqueeze(1), 
+                is_hard_to_match[masked_indices].unsqueeze(1)
+            ], dim=1)
+            # print("In data: ", in_data, in_data.shape)
+
+            x = self.embedding(in_data)
+            
+            adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
+            # print("X: ", x.shape)
+            # print("Adjacency matrix revised: ", adj_matrix_revised, adj_matrix_revised.shape)
+            edge_index = adj_matrix_revised.nonzero(as_tuple=False).t()
+
+            x = self.gat(x, edge_index)
+            x = self.select_fc(x)
+            x = F.sigmoid(x)
+
+            # print("X output: ", x)
+
+            ret_nodes = torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
+            ret_nodes[masked_indices] = x
+            # print("Returned nodes: ", ret_nodes)
+        except Exception as e:
+            print("Error: ", e)
+            ret_nodes = torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
+        return ret_nodes

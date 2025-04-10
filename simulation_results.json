@@ -17,6 +17,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8888888888888888
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -74,6 +80,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9124087591240875
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8832116788321167
             },
             {
                 "type": {
@@ -137,6 +149,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.926829268292683
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -194,6 +212,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8955223880597014
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9253731343283581
             },
             {
                 "type": {
@@ -257,6 +281,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8920863309352517
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -314,6 +344,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9481481481481481
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9185185185185184
             },
             {
                 "type": {
@@ -377,6 +413,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.849624060150376
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -434,6 +476,12 @@
                     "method": "patient"
                 },
                 "reward": 0.927007299270073
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9051094890510948
             },
             {
                 "type": {
@@ -497,6 +545,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9375
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -554,6 +608,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9133858267716536
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8818897637795275
             },
             {
                 "type": {
@@ -617,6 +677,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8840579710144927
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -674,6 +740,12 @@
                     "method": "patient"
                 },
                 "reward": 0.948905109489051
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8832116788321167
             },
             {
                 "type": {
@@ -737,6 +809,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.927007299270073
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -797,6 +875,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8846153846153846
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -852,6 +936,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.8931297709923665
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.8931297709923665
             },
@@ -917,6 +1007,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9117647058823529
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -974,6 +1070,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8661417322834646
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.889763779527559
             },
             {
                 "type": {
@@ -1037,6 +1139,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9140625
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1094,6 +1202,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9057971014492753
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9202898550724637
             },
             {
                 "type": {
@@ -1157,6 +1271,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9037037037037037
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1214,6 +1334,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9090909090909092
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9160839160839161
             },
             {
                 "type": {
@@ -1277,6 +1403,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8712121212121212
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1334,6 +1466,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9076923076923076
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9153846153846154
             },
             {
                 "type": {
@@ -1397,6 +1535,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8686131386861313
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1452,6 +1596,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.8863636363636364
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.8863636363636364
             },
@@ -1517,6 +1667,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8629032258064516
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1574,6 +1730,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9140625
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.96875
             },
             {
                 "type": {
@@ -1637,6 +1799,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8819444444444445
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1694,6 +1862,12 @@
                     "method": "patient"
                 },
                 "reward": 0.904
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.896
             },
             {
                 "type": {
@@ -1757,6 +1931,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9185185185185184
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1814,6 +1994,12 @@
                     "method": "patient"
                 },
                 "reward": 0.936
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.896
             },
             {
                 "type": {
@@ -1877,6 +2063,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8721804511278195
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -1934,6 +2126,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9160839160839161
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8881118881118882
             },
             {
                 "type": {
@@ -1997,6 +2195,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8880597014925372
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2054,6 +2258,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9224806201550387
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8992248062015504
             },
             {
                 "type": {
@@ -2117,6 +2327,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9084507042253522
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2174,6 +2390,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9272727272727272
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9545454545454545
             },
             {
                 "type": {
@@ -2237,6 +2459,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9206349206349207
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2294,6 +2522,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8970588235294117
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9044117647058822
             },
             {
                 "type": {
@@ -2357,6 +2591,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8880597014925372
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2414,6 +2654,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8776978417266186
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9064748201438848
             },
             {
                 "type": {
@@ -2477,6 +2723,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.894736842105263
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2537,6 +2789,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.907563025210084
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2592,6 +2850,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.9090909090909091
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.9090909090909091
             },
@@ -2657,6 +2921,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9112903225806452
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2712,6 +2982,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.9402985074626865
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.9402985074626865
             },
@@ -2777,6 +3053,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8731343283582089
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2837,6 +3119,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9248120300751879
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -2892,6 +3180,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.9090909090909092
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.9090909090909092
             },
@@ -2957,6 +3251,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9259259259259258
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3014,6 +3314,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9202898550724637
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8333333333333333
             },
             {
                 "type": {
@@ -3077,6 +3383,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9160839160839161
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3134,6 +3446,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9206349206349207
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8968253968253969
             },
             {
                 "type": {
@@ -3197,6 +3515,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9398496240601504
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3254,6 +3578,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9069767441860466
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8837209302325582
             },
             {
                 "type": {
@@ -3317,6 +3647,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.944
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3374,6 +3710,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9140625
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.890625
             },
             {
                 "type": {
@@ -3437,6 +3779,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8661417322834646
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3494,6 +3842,12 @@
                     "method": "patient"
                 },
                 "reward": 0.915492957746479
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8943661971830987
             },
             {
                 "type": {
@@ -3557,6 +3911,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8837209302325582
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3614,6 +3974,12 @@
                     "method": "patient"
                 },
                 "reward": 0.898550724637681
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9057971014492753
             },
             {
                 "type": {
@@ -3677,6 +4043,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8978102189781021
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3734,6 +4106,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8790322580645161
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8951612903225806
             },
             {
                 "type": {
@@ -3797,6 +4175,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8888888888888888
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3854,6 +4238,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8984375
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.890625
             },
             {
                 "type": {
@@ -3917,6 +4307,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9097744360902255
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -3974,6 +4370,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9142857142857143
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8928571428571428
             },
             {
                 "type": {
@@ -4037,6 +4439,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8923076923076924
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4092,6 +4500,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.9166666666666666
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.9166666666666666
             },
@@ -4157,6 +4571,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.874074074074074
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4214,6 +4634,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9137931034482758
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9310344827586207
             },
             {
                 "type": {
@@ -4277,6 +4703,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9166666666666667
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4334,6 +4766,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9224806201550387
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.937984496124031
             },
             {
                 "type": {
@@ -4397,6 +4835,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8872180451127819
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4454,6 +4898,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9172932330827067
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.894736842105263
             },
             {
                 "type": {
@@ -4517,6 +4967,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8888888888888888
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4574,6 +5030,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8897058823529411
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8676470588235293
             },
             {
                 "type": {
@@ -4637,6 +5099,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8872180451127819
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4694,6 +5162,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9160839160839161
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8811188811188811
             },
             {
                 "type": {
@@ -4757,6 +5231,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8872180451127819
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4814,6 +5294,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8840579710144927
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9130434782608695
             },
             {
                 "type": {
@@ -4877,6 +5363,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8880597014925372
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -4934,6 +5426,12 @@
                     "method": "patient"
                 },
                 "reward": 0.937984496124031
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8837209302325582
             },
             {
                 "type": {
@@ -4997,6 +5495,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8920863309352517
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5054,6 +5558,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8920863309352517
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9064748201438848
             },
             {
                 "type": {
@@ -5117,6 +5627,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8540145985401459
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5174,6 +5690,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9453125
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9375
             },
             {
                 "type": {
@@ -5237,6 +5759,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9117647058823529
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5292,6 +5820,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.8931297709923665
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.8931297709923665
             },
@@ -5357,6 +5891,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8823529411764705
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5417,6 +5957,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5474,6 +6020,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9117647058823529
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8897058823529411
             },
             {
                 "type": {
@@ -5537,6 +6089,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9166666666666666
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5594,6 +6152,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9117647058823529
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8897058823529411
             },
             {
                 "type": {
@@ -5657,6 +6221,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9375
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5714,6 +6284,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8661417322834646
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8582677165354331
             },
             {
                 "type": {
@@ -5777,6 +6353,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8615384615384615
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5834,6 +6416,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9274193548387097
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8951612903225806
             },
             {
                 "type": {
@@ -5897,6 +6485,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8778625954198473
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -5954,6 +6548,12 @@
                     "method": "patient"
                 },
                 "reward": 0.9318181818181818
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9090909090909091
             },
             {
                 "type": {
@@ -6017,6 +6617,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.9202279202279203
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6074,6 +6680,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8617886178861789
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8644986449864499
             },
             {
                 "type": {
@@ -6137,6 +6749,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8429752066115702
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6194,6 +6812,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8651685393258427
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8342696629213483
             },
             {
                 "type": {
@@ -6257,6 +6881,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8264462809917356
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6314,6 +6944,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8434065934065934
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8543956043956045
             },
             {
                 "type": {
@@ -6377,6 +7013,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8269230769230769
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6434,6 +7076,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8490028490028491
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8262108262108262
             },
             {
                 "type": {
@@ -6497,6 +7145,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8683473389355743
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6554,6 +7208,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8435754189944135
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8463687150837989
             },
             {
                 "type": {
@@ -6617,6 +7277,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8351648351648352
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6674,6 +7340,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8830409356725145
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8450292397660818
             },
             {
                 "type": {
@@ -6737,6 +7409,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8286516853932584
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6794,6 +7472,12 @@
                     "method": "patient"
                 },
                 "reward": 0.847887323943662
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8225352112676056
             },
             {
                 "type": {
@@ -6857,6 +7541,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8118279569892473
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -6914,6 +7604,12 @@
                     "method": "patient"
                 },
                 "reward": 0.859504132231405
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8236914600550964
             },
             {
                 "type": {
@@ -6977,6 +7673,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8204419889502762
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7034,6 +7736,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8599439775910365
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8263305322128851
             },
             {
                 "type": {
@@ -7097,6 +7805,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8203753351206434
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7154,6 +7868,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8715083798882682
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8100558659217877
             },
             {
                 "type": {
@@ -7217,6 +7937,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8384401114206128
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7274,6 +8000,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8798882681564246
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8184357541899441
             },
             {
                 "type": {
@@ -7337,6 +8069,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8465909090909091
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7394,6 +8132,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8694444444444445
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8305555555555556
             },
             {
                 "type": {
@@ -7457,6 +8201,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8522727272727273
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7514,6 +8264,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8677685950413223
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.837465564738292
             },
             {
                 "type": {
@@ -7577,6 +8333,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8277777777777777
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7634,6 +8396,12 @@
                     "method": "patient"
                 },
                 "reward": 0.875
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8352272727272727
             },
             {
                 "type": {
@@ -7697,6 +8465,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8228571428571428
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7754,6 +8528,12 @@
                     "method": "patient"
                 },
                 "reward": 0.867605633802817
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.856338028169014
             },
             {
                 "type": {
@@ -7817,6 +8597,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8360655737704918
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7874,6 +8660,12 @@
                     "method": "patient"
                 },
                 "reward": 0.871866295264624
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.83008356545961
             },
             {
                 "type": {
@@ -7937,6 +8729,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8516483516483516
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -7994,6 +8792,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8653846153846154
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8214285714285714
             },
             {
                 "type": {
@@ -8057,6 +8861,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8296703296703297
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8114,6 +8924,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8816901408450705
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.819718309859155
             },
             {
                 "type": {
@@ -8177,6 +8993,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8384401114206128
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8234,6 +9056,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8739726027397261
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.852054794520548
             },
             {
                 "type": {
@@ -8297,6 +9125,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8093994778067884
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8354,6 +9188,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8418079096045198
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8531073446327684
             },
             {
                 "type": {
@@ -8417,6 +9257,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8355437665782494
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8474,6 +9320,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8623595505617978
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8370786516853933
             },
             {
                 "type": {
@@ -8537,6 +9389,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8338192419825071
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8594,6 +9452,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8812154696132597
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8314917127071824
             },
             {
                 "type": {
@@ -8657,6 +9521,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8324324324324325
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8714,6 +9584,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8947368421052632
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.850415512465374
             },
             {
                 "type": {
@@ -8777,6 +9653,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8461538461538461
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8834,6 +9716,12 @@
                     "method": "patient"
                 },
                 "reward": 0.888888888888889
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.85
             },
             {
                 "type": {
@@ -8897,6 +9785,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8382749326145552
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -8954,6 +9848,12 @@
                     "method": "patient"
                 },
                 "reward": 0.837465564738292
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8429752066115702
             },
             {
                 "type": {
@@ -9017,6 +9917,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8301886792452831
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9074,6 +9980,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8607954545454546
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8352272727272727
             },
             {
                 "type": {
@@ -9137,6 +10049,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8310991957104558
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9194,6 +10112,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8409090909090909
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8323863636363636
             },
             {
                 "type": {
@@ -9257,6 +10181,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8342541436464088
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9314,6 +10244,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8692098092643052
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8474114441416893
             },
             {
                 "type": {
@@ -9377,6 +10313,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8559556786703602
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9434,6 +10376,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8913649025069639
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8272980501392757
             },
             {
                 "type": {
@@ -9497,6 +10445,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8105849582172702
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9554,6 +10508,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8579088471849866
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8176943699731903
             },
             {
                 "type": {
@@ -9617,6 +10577,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8110236220472441
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9674,6 +10640,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8657534246575342
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8465753424657534
             },
             {
                 "type": {
@@ -9737,6 +10709,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8425414364640884
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9794,6 +10772,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8739726027397261
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.821917808219178
             },
             {
                 "type": {
@@ -9857,6 +10841,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8275862068965517
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -9914,6 +10904,12 @@
                     "method": "patient"
                 },
                 "reward": 0.871866295264624
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8523676880222841
             },
             {
                 "type": {
@@ -9977,6 +10973,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8263305322128851
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10034,6 +11036,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8619718309859156
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.828169014084507
             },
             {
                 "type": {
@@ -10097,6 +11105,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.847457627118644
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10154,6 +11168,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8465909090909091
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8551136363636364
             },
             {
                 "type": {
@@ -10217,6 +11237,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8516483516483516
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10274,6 +11300,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8974358974358975
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8746438746438747
             },
             {
                 "type": {
@@ -10337,6 +11369,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8222222222222222
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10394,6 +11432,12 @@
                     "method": "patient"
                 },
                 "reward": 0.845945945945946
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8351351351351352
             },
             {
                 "type": {
@@ -10457,6 +11501,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8133704735376044
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10514,6 +11564,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8810198300283286
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8413597733711048
             },
             {
                 "type": {
@@ -10577,6 +11633,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8463687150837989
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10634,6 +11696,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8712328767123289
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8410958904109589
             },
             {
                 "type": {
@@ -10697,6 +11765,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8441926345609065
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10754,6 +11828,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8770949720670391
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8519553072625698
             },
             {
                 "type": {
@@ -10817,6 +11897,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8315217391304348
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10874,6 +11960,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8619718309859156
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8422535211267606
             },
             {
                 "type": {
@@ -10937,6 +12029,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8189655172413793
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -10994,6 +12092,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8794520547945206
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8301369863013699
             },
             {
                 "type": {
@@ -11057,6 +12161,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8469945355191257
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11114,6 +12224,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8595988538681949
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.853868194842407
             },
             {
                 "type": {
@@ -11177,6 +12293,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8401162790697675
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11234,6 +12356,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8575342465753425
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8273972602739726
             },
             {
                 "type": {
@@ -11297,6 +12425,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8415300546448088
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11354,6 +12488,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8543956043956045
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8214285714285714
             },
             {
                 "type": {
@@ -11417,6 +12557,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8387978142076503
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11474,6 +12620,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8732394366197184
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8309859154929577
             },
             {
                 "type": {
@@ -11537,6 +12689,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8403361344537815
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11594,6 +12752,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8816901408450705
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8309859154929577
             },
             {
                 "type": {
@@ -11657,6 +12821,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8397626112759643
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11714,6 +12884,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8672566371681415
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8731563421828907
             },
             {
                 "type": {
@@ -11777,6 +12953,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8499999999999999
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11834,6 +13016,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8554913294797688
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8352601156069365
             },
             {
                 "type": {
@@ -11897,6 +13085,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8357348703170029
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -11954,6 +13148,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8659517426273459
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8418230563002681
             },
             {
                 "type": {
@@ -12017,6 +13217,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8931034482758621
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12072,6 +13278,12 @@
             {
                 "type": {
                     "method": "patient"
+                },
+                "reward": 0.8474970896391152
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
                 },
                 "reward": 0.8474970896391152
             },
@@ -12137,6 +13349,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8302540415704388
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12194,6 +13412,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8653624856156502
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8319907940161104
             },
             {
                 "type": {
@@ -12257,6 +13481,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.831603229527105
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12314,6 +13544,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8457997698504027
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8193325661680092
             },
             {
                 "type": {
@@ -12377,6 +13613,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8141695702671312
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12434,6 +13676,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8491228070175438
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8210526315789474
             },
             {
                 "type": {
@@ -12497,6 +13745,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8264947245017584
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12554,6 +13808,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8657407407407407
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8252314814814814
             },
             {
                 "type": {
@@ -12617,6 +13877,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8180764774044033
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12674,6 +13940,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8526315789473684
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8315789473684211
             },
             {
                 "type": {
@@ -12737,6 +14009,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8112128146453089
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12794,6 +14072,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8544819557625145
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8183934807916181
             },
             {
                 "type": {
@@ -12857,6 +14141,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8116279069767441
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -12914,6 +14204,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8551564310544612
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8157589803012746
             },
             {
                 "type": {
@@ -12977,6 +14273,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8352803738317757
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13034,6 +14336,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8558352402745996
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.834096109839817
             },
             {
                 "type": {
@@ -13097,6 +14405,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8251748251748251
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13154,6 +14468,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8616279069767442
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8151162790697674
             },
             {
                 "type": {
@@ -13217,6 +14537,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8214702450408401
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13274,6 +14600,12 @@
                     "method": "patient"
                 },
                 "reward": 0.856156501726122
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8193325661680092
             },
             {
                 "type": {
@@ -13337,6 +14669,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.818287037037037
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13394,6 +14732,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8652729384436701
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8199767711962833
             },
             {
                 "type": {
@@ -13457,6 +14801,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8262370540851554
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13514,6 +14864,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8638985005767013
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8281430219146482
             },
             {
                 "type": {
@@ -13577,6 +14933,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8047673098751419
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13634,6 +14996,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8586326767091541
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8099652375434531
             },
             {
                 "type": {
@@ -13697,6 +15065,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8220436280137773
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13754,6 +15128,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8502304147465438
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8248847926267281
             },
             {
                 "type": {
@@ -13817,6 +15197,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8189252336448598
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13874,6 +15260,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8576388888888888
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8310185185185185
             },
             {
                 "type": {
@@ -13937,6 +15329,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8412514484356894
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -13994,6 +15392,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8564760793465578
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8273045507584598
             },
             {
                 "type": {
@@ -14057,6 +15461,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8232558139534883
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14114,6 +15524,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8423475258918297
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8216340621403913
             },
             {
                 "type": {
@@ -14177,6 +15593,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8073817762399077
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14234,6 +15656,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8561484918793504
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.814385150812065
             },
             {
                 "type": {
@@ -14297,6 +15725,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8208092485549132
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14354,6 +15788,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8543123543123543
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8181818181818181
             },
             {
                 "type": {
@@ -14417,6 +15857,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8237327188940092
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14474,6 +15920,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8539976825028969
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8146002317497103
             },
             {
                 "type": {
@@ -14537,6 +15989,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8154555940023067
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14594,6 +16052,12 @@
                     "method": "patient"
                 },
                 "reward": 0.848729792147806
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8198614318706697
             },
             {
                 "type": {
@@ -14657,6 +16121,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8354577056778679
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14714,6 +16184,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8583042973286876
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8304297328687572
             },
             {
                 "type": {
@@ -14777,6 +16253,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8174322732626619
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14834,6 +16316,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8514739229024944
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.81859410430839
             },
             {
                 "type": {
@@ -14897,6 +16385,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8181818181818181
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -14954,6 +16448,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8512110726643598
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8177623990772779
             },
             {
                 "type": {
@@ -15017,6 +16517,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8114086146682188
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15074,6 +16580,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8548199767711963
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8292682926829268
             },
             {
                 "type": {
@@ -15137,6 +16649,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8317865429234339
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15194,6 +16712,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8643274853801169
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8070175438596491
             },
             {
                 "type": {
@@ -15257,6 +16781,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8352668213457076
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15314,6 +16844,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8553240740740741
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8055555555555555
             },
             {
                 "type": {
@@ -15377,6 +16913,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8255813953488372
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15434,6 +16976,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8528389339513326
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8146002317497103
             },
             {
                 "type": {
@@ -15497,6 +17045,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.813953488372093
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15554,6 +17108,12 @@
                     "method": "patient"
                 },
                 "reward": 0.856492027334852
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8177676537585421
             },
             {
                 "type": {
@@ -15617,6 +17177,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8317972350230415
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15674,6 +17240,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8632676709154113
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8088064889918887
             },
             {
                 "type": {
@@ -15737,6 +17309,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8068571428571428
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15794,6 +17372,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8542141230068337
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8234624145785877
             },
             {
                 "type": {
@@ -15857,6 +17441,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8249427917620137
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -15914,6 +17504,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8508670520231214
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8184971098265895
             },
             {
                 "type": {
@@ -15977,6 +17573,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8153310104529616
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16034,6 +17636,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8584579976985041
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8308400460299195
             },
             {
                 "type": {
@@ -16097,6 +17705,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8362369337979094
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16154,6 +17768,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8467836257309942
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8257309941520468
             },
             {
                 "type": {
@@ -16217,6 +17837,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8116959064327485
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16274,6 +17900,12 @@
                     "method": "patient"
                 },
                 "reward": 0.851039260969977
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8233256351039261
             },
             {
                 "type": {
@@ -16337,6 +17969,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.828505214368482
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16394,6 +18032,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8631090487238979
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.820185614849188
             },
             {
                 "type": {
@@ -16457,6 +18101,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8194444444444444
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16514,6 +18164,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8486238532110092
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.819954128440367
             },
             {
                 "type": {
@@ -16577,6 +18233,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8230403800475059
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16634,6 +18296,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8457997698504027
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8089758342922899
             },
             {
                 "type": {
@@ -16697,6 +18365,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.832752613240418
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16754,6 +18428,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8521939953810623
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8244803695150115
             },
             {
                 "type": {
@@ -16817,6 +18497,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8071593533487298
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16874,6 +18560,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8508670520231214
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8219653179190751
             },
             {
                 "type": {
@@ -16937,6 +18629,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8235294117647058
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -16994,6 +18692,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8679678530424799
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8254879448909299
             },
             {
                 "type": {
@@ -17057,6 +18761,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8198614318706697
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17114,6 +18824,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8433874709976799
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8109048723897911
             },
             {
                 "type": {
@@ -17177,6 +18893,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8203033838973162
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17234,6 +18956,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8527042577675489
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8227848101265822
             },
             {
                 "type": {
@@ -17297,6 +19025,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8138728323699421
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17354,6 +19088,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8579743888242142
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8323632130384168
             },
             {
                 "type": {
@@ -17417,6 +19157,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8131487889273356
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17474,6 +19220,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8648018648018648
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8181818181818181
             },
             {
                 "type": {
@@ -17537,6 +19289,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.817351598173516
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17594,6 +19352,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8666666666666667
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8229885057471265
             },
             {
                 "type": {
@@ -17657,6 +19421,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.806936416184971
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17714,6 +19484,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8697674418604652
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8325581395348837
             },
             {
                 "type": {
@@ -17777,6 +19553,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8147295742232451
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17834,6 +19616,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8530751708428246
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.806378132118451
             },
             {
                 "type": {
@@ -17897,6 +19685,12 @@
             },
             {
                 "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8137931034482758
+            },
+            {
+                "type": {
                     "method": "periodic",
                     "period": 2
                 },
@@ -17954,6 +19748,12 @@
                     "method": "patient"
                 },
                 "reward": 0.8561484918793504
+            },
+            {
+                "type": {
+                    "method": "greedy-patient-mixed"
+                },
+                "reward": 0.8271461716937355
             },
             {
                 "type": {
