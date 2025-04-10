@@ -71,7 +71,7 @@ def get_patient_percentage(env: PairedKidneyDonationEnv):
         # check if any elements are just before the timestep when they depart?
         selection = np.zeros(env.n_agents)
         for i in range(env.n_agents):
-            if env.agent_data[i]["departure_time"] - env.current_step == 1:
+            if env.real_departure_times[i] - env.current_step == 1:
                 selection[i] = 1
         action = {
             "selection": selection,
