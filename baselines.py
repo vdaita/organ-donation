@@ -62,7 +62,25 @@ def get_periodic_greedy_mixed(env: PairedKidneyDonationEnv, period_timesteps: in
             }
             observation, reward, done, _, info = env.step(action)
     env.start_over()
-    return reward            
+    return reward   
+
+def get_patient_percentage(env: PairedKidneyDonationEnv):
+    obs, info = env.start_over()
+    reward, done = 0, False
+    while not done:
+        # check if any elements are just before the timestep when they depart?
+        selection = np.zeros(env.n_agents)
+        for i in range(env.n_agents):
+            if env.agent_data[i]["departure_time"] - env.current_step == 1:
+                selection[i] = 1
+        action = {
+            "selection": selection,
+            "match_selection": 1,
+            "match_regular": 0
+        }      
+        observation, reward, done, _, info = env.step(action)
+    env.start_over()
+    return reward   
 
 if __name__ == "__main__":
     periods = [2, 4, 7] # when 180 timesteps and 90 criticality rate, each day represents 4 days
@@ -93,6 +111,13 @@ if __name__ == "__main__":
                     "method": "greedy"
                 },
                 "reward": greedy_reward
+            })
+
+            simulation_result["results"].append({
+                "type": {
+                    "method": "patient"
+                },
+                "reward": get_patient_percentage(env)
             })
 
             for period in tqdm(periods, desc="Periods", leave=False):
