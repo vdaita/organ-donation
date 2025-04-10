@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from fire import Fire
 
-SHOW_OPTIMAL = True
-
 def make_graph(SHOW_OPTIMAL=True):
     results = json.load(open("simulation_results.json", "r"))
     results_by_agent_count = {}
@@ -22,6 +20,8 @@ def make_graph(SHOW_OPTIMAL=True):
             greedy_reward = [res for res in result["results"] if res["type"]["method"] == "greedy"][0]["reward"]
             periodic_rewards = [res for res in result["results"] if res["type"]["method"] == "periodic"]
             mixed_rewards = [res for res in result["results"] if res["type"]["method"] == "mixed"]
+            patient_reward = [res for res in result["results"] if res["type"]["method"] == "patient"][0]["reward"]
+
 
             for periodic_reward in periodic_rewards:
                 name = periodic_reward["type"]["method"] + "-" + str(periodic_reward["type"]["period"])
@@ -36,6 +36,10 @@ def make_graph(SHOW_OPTIMAL=True):
                 if name not in aggregated_results:
                     aggregated_results[name] = []
                 aggregated_results[name].append(ratio)
+            
+            if "patient" not in aggregated_results:
+                aggregated_results["patient"] = []
+            aggregated_results["patient"].append(patient_reward / greedy_reward)
             
             if SHOW_OPTIMAL:
                 if "retrospective-optimal" not in aggregated_results:
@@ -60,3 +64,6 @@ def make_graph(SHOW_OPTIMAL=True):
 
         plt.savefig(f'reward_ratios_{agent_count}_agents{optimal_str}.png')
         plt.show()
+
+if __name__ == "__main__":
+    Fire(make_graph)
