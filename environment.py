@@ -118,7 +118,8 @@ class PairedKidneyDonationEnv(gym.Env):
             "arrivals": self.arrival_times,
             "departures": self.real_departure_times,
             "is_hard_to_match": self.is_hard_to_match,
-            "active_agents": self.active_agents
+            "active_agents": self.active_agents,
+            "total_timesteps": self.n_timesteps
         }
     
     def get_reward(self):

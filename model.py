@@ -16,7 +16,7 @@ class PairedKidneyModel(nn.Module):
             nn.Linear(hidden_dim, hidden_dim)
         )
         self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim, num_layers=num_layers)
-        self.select_fc = nn.Linear(hidden_dim, 1)
+        self.select_fc = nn.Linear((hidden_dim + 1), 1)
         
 
     def reset_parameters(self):
@@ -28,7 +28,7 @@ class PairedKidneyModel(nn.Module):
         if self.select_fc.bias is not None:
             nn.init.zeros_(self.select_fc.bias)
 
-    def forward(self, adj_matrix, timestep, arrival, departure, is_hard_to_match, mask):    
+    def forward(self, adj_matrix, timestep, arrival, departure, is_hard_to_match, total_timesteps, mask):    
         try:
             masked_indices = torch.nonzero(mask, as_tuple=False).squeeze()
             num_active = masked_indices.size(0)            
@@ -57,8 +57,15 @@ class PairedKidneyModel(nn.Module):
             # print("Adjacency matrix revised: ", adj_matrix_revised, adj_matrix_revised.shape)
             edge_index = adj_matrix_revised.nonzero(as_tuple=False).t()
 
-            x = self.gat(x, edge_index)
+            x = x + self.gat(x, edge_index) # adding residual
+            x = F.layer_norm(x, x.size()[1:]) # layer normalization
+
+            time_context = torch.full((num_active, 1), (timestep / total_timesteps), device=adj_matrix.device)
+            x = torch.cat([x, time_context], dim=1)
+
             x = self.select_fc(x)
+
+
             x = F.sigmoid(x)
 
             # print("X output: ", x)
