@@ -7,10 +7,11 @@ import gymnasium as gym
 from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
 import json
+from torch.optim.lr_scheduler import StepLR
 
 class REINFORCE:
     def __init__(self, device="cpu", model=None):
-        self.learning_rate = 1e-5
+        self.learning_rate = 1e-4
         self.gamma = 1
         
         if not model:
@@ -23,6 +24,7 @@ class REINFORCE:
             self.model = model
         print("Number of parameters: ", sum(p.numel() for p in self.model.parameters()))
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.scheduler = StepLR(self.optimizer, step_size=16, gamma=0.75)
         self.device = torch.device(device)
 
         self.model.to(self.device)
@@ -116,6 +118,7 @@ class REINFORCE:
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
+        self.scheduler.step()
         
         self.probs = []
 
@@ -123,7 +126,7 @@ class REINFORCE:
 # MPS has some issues when trying to compute the loss
 
 # training constants
-episodes_per_env = 64
+episodes_per_env = 256
 eval_lookback = 8
 eval_period = 8
 batch_size = 8
@@ -134,19 +137,9 @@ agent = REINFORCE(
 
 envs = [
     PairedKidneyDonationEnv(
-        n_agents=100,
-        n_timesteps=36,
-        criticality_rate=18
-    ),
-    PairedKidneyDonationEnv(
-        n_agents=250,
-        n_timesteps=36,
-        criticality_rate=18
-    ),
-    PairedKidneyDonationEnv(
-        n_agents=500,
-        n_timesteps=36,
-        criticality_rate=18
+        n_agents=1000,
+        n_timesteps=180,
+        criticality_rate=90
     )
 ]
 
@@ -195,7 +188,7 @@ for env in envs:
     eval_model_rewards = []
     eval_patient_rewards = []
  
-    for i in tqdm(range(episodes_per_env)):
+    for i in tqdm(range(64)):
         obs, info = env.reset()
         done = False
 

@@ -14,7 +14,7 @@ with open("model_results.json") as f:
 
     # Plot the reward ratios
     plt.figure(figsize=(10, 6))
-    plt.boxplot([patient_ratio, greedy_ratio], labels=["Patient Reward Ratio", "Greedy Reward Ratio"])
+    plt.boxplot([patient_ratio, greedy_ratio], labels=["Model Reward / Patient Reward", "Model Reward / Greedy Reward"])
     plt.ylabel("Reward Ratio")
     plt.title("Reward Ratios Distribution")
     plt.grid(True)
