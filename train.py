@@ -7,11 +7,6 @@ import gymnasium as gym
 from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
 
-env = PairedKidneyDonationEnv(
-    n_agents=250,
-    n_timesteps=36,
-    criticality_rate=18
-)
 
 class REINFORCE:
     def __init__(self, device="cpu", model=None):
@@ -70,72 +65,105 @@ class REINFORCE:
             "match_regular": 0
         }
 
-    def update(self, reward) -> None:
-        reward_tensor = torch.tensor(reward, dtype=torch.float32, device=self.device)
-        log_probs = torch.stack(self.probs)
-        log_probs_mean = log_probs.mean(dim=0)
-
-        # print(log_probs.shape, log_probs_mean.shape, reward)
+    def update(self, rewards) -> None:
+        reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=self.device)
         
-        loss = -torch.mean(log_probs_mean) * reward_tensor
+        if len(rewards) > 1:
+            reward_tensor = (reward_tensor - reward_tensor.mean()) / (reward_tensor.std() + 1e-8)
+        
+        log_probs = torch.stack(self.probs)
 
+        policy_loss = 0
+        for i, r in enumerate(reward_tensor):
+            episode_log_probs = log_probs[i]
+            policy_loss += -torch.mean(episode_log_probs) * r
+        
+        policy_loss /= len(rewards)        
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        policy_loss.backward()
 
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        self.optimizer.step()
+        
         self.probs = []
 
 
 # MPS has some issues when trying to compute the loss
 
 # training constants
-total_episodes = 2000
-eval_lookback = 4
-eval_period = 20
+episodes_per_env = 128
+eval_lookback = 16
+eval_period = 16
 batch_size = 16
     
 agent = REINFORCE(
     device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
 )
 
-reward_over_episodes = []
-recent_greedy_rewards = []
-recent_patient_rewards = []
-recent_rewards = []
+envs = [
+    PairedKidneyDonationEnv(
+        n_agents=100,
+        n_timesteps=36,
+        criticality_rate=18
+    ),
+    PairedKidneyDonationEnv(
+        n_agents=250,
+        n_timesteps=36,
+        criticality_rate=18
+    ),
+    PairedKidneyDonationEnv(
+        n_agents=500,
+        n_timesteps=36,
+        criticality_rate=18
+    ),
+    PairedKidneyDonationEnv(
+        n_agents=500,
+        n_timesteps=180,
+        criticality_rate=90
+    )
+]
 
-for episode in tqdm(range(total_episodes)):
-    obs, info = env.reset()
-    done = False
 
-    while not done:
-        action = agent.sample_action(obs)
-        obs, reward, done, _, info = env.step(action)
-    greedy_reward = get_greedy_percentage(env)
-    
-    reward_over_episodes.append(reward)
-    recent_rewards.append(reward)
 
-    if len(recent_rewards) >= batch_size:
-        agent.update(np.mean(recent_rewards))
-        recent_rewards = []
+for env in envs:
+    reward_over_episodes = []
+    recent_greedy_rewards = []
+    recent_patient_rewards = []
+    recent_rewards = []
+    for episode in tqdm(range(episodes_per_env)):
+        obs, info = env.reset()
+        done = False
 
-    if ((episode + 1) % eval_period) >= (eval_period - eval_lookback):
-        recent_greedy_rewards.append(greedy_reward)
-        recent_patient_rewards.append(get_patient_percentage(env))
+        while not done:
+            action = agent.sample_action(obs)
+            obs, reward, done, _, info = env.step(action)
+        greedy_reward = get_greedy_percentage(env)
+        advantage = reward - greedy_reward
+        shaped_reward = reward + 0.25 * advantage # trying to adjust for the greedy reward
 
-    if (episode + 1) % eval_period == 0:
-        mean_reward = np.mean(reward_over_episodes[-eval_lookback:])
-        mean_greedy_reward = np.mean(recent_greedy_rewards)
-        mean_patient_reward = np.mean(recent_patient_rewards)
+        reward_over_episodes.append(reward)
+        recent_rewards.append(shaped_reward)
 
-        print(f"Episode {episode + 1}: "
-              f"avg reward = {mean_reward:.2f}, "
-              f"greedy = {mean_greedy_reward:.2f}, "
-              f"patient = {mean_patient_reward:.2f}")
+        if len(recent_rewards) >= batch_size:
+            agent.update(recent_rewards)
+            recent_rewards = []
 
-        recent_greedy_rewards.clear()
-        recent_patient_rewards.clear()
+        if ((episode + 1) % eval_period) >= (eval_period - eval_lookback):
+            recent_greedy_rewards.append(greedy_reward)
+            recent_patient_rewards.append(get_patient_percentage(env))
 
-env.close()
+        if (episode + 1) % eval_period == 0:
+            mean_reward = np.mean(reward_over_episodes[-eval_lookback:])
+            mean_greedy_reward = np.mean(recent_greedy_rewards)
+            mean_patient_reward = np.mean(recent_patient_rewards)
+
+            print(f"Episode {episode + 1}: "
+                f"avg reward = {mean_reward:.2f}, "
+                f"greedy = {mean_greedy_reward:.2f}")
+
+            recent_greedy_rewards.clear()
+            recent_patient_rewards.clear()
+
+    env.close()
 
 torch.save(agent.model.state_dict(), "model.pth")

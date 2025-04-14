@@ -16,7 +16,7 @@ class PairedKidneyModel(nn.Module):
             nn.Linear(hidden_dim, hidden_dim)
         )
         self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim, num_layers=num_layers)
-        self.select_fc = nn.Linear((hidden_dim + 1), 1)
+        self.select_fc = nn.Linear((hidden_dim), 1)
         
 
     def reset_parameters(self):
@@ -41,14 +41,15 @@ class PairedKidneyModel(nn.Module):
             # print("Input values to next stage: ", " nodes: ", relevant_nodes,  " arrivals: ", relevant_arrivals, " departures: ", relevant_departures, " timestep: ", timestep_expanded)    
 
             relevant_progress = (timestep_expanded - relevant_arrivals) / (relevant_departures - relevant_arrivals)
-            
+            time_context = torch.full((num_active, ), (timestep / total_timesteps), device=adj_matrix.device)
+    
             # print("Relevant progress: ", relevant_progress.shape, relevant_progress)
             # print("Is hard to match: ", is_hard_to_match[masked_indices].shape, is_hard_to_match[masked_indices])
             in_data = torch.concat([
                 relevant_progress.unsqueeze(1), 
                 is_hard_to_match[masked_indices].unsqueeze(1)
+                # time_context.unsqueeze(1)
             ], dim=1)
-            # print("In data: ", in_data, in_data.shape)
 
             x = self.embedding(in_data)
             
@@ -59,9 +60,6 @@ class PairedKidneyModel(nn.Module):
 
             x = x + self.gat(x, edge_index) # adding residual
             x = F.layer_norm(x, x.size()[1:]) # layer normalization
-
-            time_context = torch.full((num_active, 1), (timestep / total_timesteps), device=adj_matrix.device)
-            x = torch.cat([x, time_context], dim=1)
 
             x = self.select_fc(x)
 
