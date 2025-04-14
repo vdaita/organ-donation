@@ -6,7 +6,7 @@ import torch
 import gymnasium as gym
 from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
-
+import json
 
 class REINFORCE:
     def __init__(self, device="cpu", model=None):
@@ -29,7 +29,39 @@ class REINFORCE:
 
         self.probs = []
 
-    def sample_action(self, state: dict) -> float:
+    def get_action(self, state: dict) -> float:
+        tensor_state = {}
+        for key in state:
+            if not (isinstance(state[key], int) or isinstance(state[key], float)):
+                tensor_state[key] = torch.Tensor(state[key]).to(self.device)
+        
+        if sum(state["active_agents"]) == 0: # there are no elements to consider - will break model
+            return {
+                "selection": np.zeros(env.n_agents),
+                "match_selection": 0,
+                "match_regular": 0
+            }
+        
+
+        item_priority = self.model(tensor_state["adjacency_matrix"], 
+                                   state["timestep"], 
+                                   tensor_state["arrivals"], 
+                                   tensor_state["departures"],
+                                   tensor_state["is_hard_to_match"], 
+                                   state["total_timesteps"], 
+                                   tensor_state["active_agents"])
+        
+        item_priority = item_priority.cpu().detach().numpy()
+
+        # after you've sampled values from the distribution, you have to align them to 0 or 1 for each of them
+        item_priority = (item_priority > 0.5).astype(np.int32)
+        return {
+            "selection": item_priority,
+            "match_selection": 1,
+            "match_regular": 0
+        }
+
+    def sample_action(self, state: dict) -> dict:
         tensor_state = {}
         for key in state:
             if not (isinstance(state[key], int) or isinstance(state[key], float)):
@@ -91,10 +123,10 @@ class REINFORCE:
 # MPS has some issues when trying to compute the loss
 
 # training constants
-episodes_per_env = 128
-eval_lookback = 16
-eval_period = 16
-batch_size = 16
+episodes_per_env = 64
+eval_lookback = 8
+eval_period = 8
+batch_size = 8
     
 agent = REINFORCE(
     device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
@@ -115,11 +147,6 @@ envs = [
         n_agents=500,
         n_timesteps=36,
         criticality_rate=18
-    ),
-    PairedKidneyDonationEnv(
-        n_agents=500,
-        n_timesteps=180,
-        criticality_rate=90
     )
 ]
 
@@ -163,6 +190,34 @@ for env in envs:
 
             recent_greedy_rewards.clear()
             recent_patient_rewards.clear()
+
+    eval_greedy_rewards = []
+    eval_model_rewards = []
+    eval_patient_rewards = []
+ 
+    for i in tqdm(range(episodes_per_env)):
+        obs, info = env.reset()
+        done = False
+
+        while not done:
+            action = agent.get_action(obs)
+            obs, reward, done, _, info = env.step(action)
+        greedy_reward = get_greedy_percentage(env)
+        patient_reward = get_patient_percentage(env)
+
+        eval_greedy_rewards.append(greedy_reward)
+        eval_patient_rewards.append(patient_reward)
+        eval_model_rewards.append(reward)
+    
+    with open("model_results.json", "w+") as f:
+        f.write(json.dumps(
+            {
+                "reward": eval_model_rewards,
+                "greedy_reward": eval_greedy_rewards,
+                "patient_reward": eval_patient_rewards,
+            }
+        ))
+
 
     env.close()
 

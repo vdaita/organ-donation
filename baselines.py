@@ -5,6 +5,9 @@ import time
 import gymnasium as gym
 from tqdm import tqdm
 import json
+from model import PairedKidneyModel
+import torch
+from copy import deepcopy
 
 def get_greedy_percentage(env: PairedKidneyDonationEnv): # easier to test with PairedKidneyDonationEnv directly
     obs, info = env.start_over()
@@ -103,8 +106,9 @@ def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
 if __name__ == "__main__":
     periods = [2, 4, 7] # when 180 timesteps and 90 criticality rate, each day represents 4 days
     # twice a week, once every 2 weeks, once a month (roughly)
-    num_simulations = 100
+    num_simulations = 16
     num_agents = [500, 1000, 2000]
+    use_model = False # TODO: fix! doesn't work
 
     simulation_results = []
 
@@ -161,6 +165,45 @@ if __name__ == "__main__":
                         "period": period
                     },
                     "reward": mixed_reward
+                })
+
+            if use_model:
+                model = PairedKidneyModel(
+                    hidden_dim=32,
+                    num_layers=8
+                )
+                model.load_state_dict(torch.load("model.pth"))
+
+                obs, info = env.start_over()
+                done = False
+                while not done:
+                    tensor_state = deepcopy(obs)
+                    for key in tensor_state:
+                        if not (isinstance(obs[key], int) or isinstance(obs[key], float)):
+                            tensor_state[key] = torch.Tensor(obs[key])
+
+                    action = model(
+                        tensor_state["adjacency_matrix"], 
+                        obs["timestep"], 
+                        tensor_state["arrivals"], 
+                        tensor_state["departures"],
+                        tensor_state["is_hard_to_match"], 
+                        obs["total_timesteps"], 
+                        tensor_state["active_agents"]
+                    )
+                    action = action.cpu().detach().numpy()
+                    action = {
+                        "selection": action,
+                        "match_selection": 1,
+                        "match_regular": 0
+                    }
+                    obs, reward, done, _, info = env.step(action)
+                
+                simulation_result["results"].append({
+                    "type": {
+                        "method": "model"
+                    },
+                    "reward": reward
                 })
 
             simulation_results.append(simulation_result)    
