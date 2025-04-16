@@ -1,217 +1,236 @@
 from environment import PairedKidneyDonationEnv
-from model import PairedKidneyModel
+from model import PairedKidneyModel, PairedKidneyCriticModel
 import numpy as np
-from torch.distributions.normal import Normal
+from torch.distributions.bernoulli import Bernoulli
 import torch
 import gymnasium as gym
 from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
 import json
 from torch.optim.lr_scheduler import StepLR
+from torch import nn
+from torch_geometric.nn import GAT, global_mean_pool
 
-class REINFORCE:
-    def __init__(self, device="cpu", model=None):
-        self.learning_rate = 1e-4
-        self.gamma = 1
+class PPO:
+    def __init__(self, num_layers=6, hidden_dim=32, device="cpu"):
+        self.device = device
+
+        self.actor_model = PairedKidneyModel(num_layers=num_layers, hidden_dim=hidden_dim)
+        self.critic_model = PairedKidneyCriticModel(num_layers=num_layers, hidden_dim=hidden_dim)
+
+        self.optimizer = torch.optim.Adam(
+            list(self.actor_model.parameters()) + list(self.critic_model.parameters()),
+            lr=0.001,
+            eps=1e-5,
+        )
+        self.scheduler = StepLR(
+            self.optimizer,
+            step_size=16,
+            gamma=0.1
+        )
+
+        self.discount_factor = 0.98
+        self.gae_smoothing = 0.95
+        self.clip_ratio = 0.2  # PPO clipping parameter
+
+        self.actor_model.to(self.device)
+        self.critic_model.to(self.device)
+
+    def sample_action(self, obs):
+        probs = self.actor_model(obs).squeeze(-1)
+        probs = torch.clamp(probs, 1e-6, 1.0 - 1e-6)
+        distribution = Bernoulli(probs=probs)
+        action = distribution.sample()
+        logprob = distribution.log_prob(action).sum()
+        return action, logprob, probs
+
+    def get_action(self, obs):
+        probs = self.actor_model(obs).squeeze(-1)
+        # Convert probabilities to binary actions with threshold of 0.5
+        return (probs >= 0.5).float()
+
+    def compute_values_for_episode(self, env: PairedKidneyDonationEnv):
+        self.actor_model.train()
+        self.critic_model.train()
+
+        obs, info = env.start_over()
+        done = False
+
+        observations = []
+        actions = []
+        rewards = []
+        values = []
+        logprobs = []
+        probs_list = []
+
+        while not done:
+            if obs["active_agents"].sum() == 0:
+                action = torch.zeros((obs["active_agents"].shape[0],), device=self.device)
+                logprob = torch.tensor(0.0, device=self.device)
+                probs = torch.zeros((obs["active_agents"].shape[0],), device=self.device)
+            else:
+                action, logprob, probs = self.sample_action(obs)
+
+            # Get value estimate
+            value = self.critic_model(obs) if obs["active_agents"].sum() > 0 else torch.tensor(0.0, device=self.device)
+            
+            # Store current state info
+            observations.append(obs)
+            actions.append(action)
+            values.append(value)
+            logprobs.append(logprob)
+            probs_list.append(probs)
+            
+            # Take a step in the environment
+            obs, reward, done, _, info = env.step(action)
+            reward = torch.tensor(reward, device=self.device, dtype=torch.float32)
+            rewards.append(reward)
+            
+        # Stack tensors
+        actions = torch.stack(actions)
+        rewards = torch.stack(rewards)
+        values = torch.stack(values)
+        logprobs = torch.stack(logprobs)
         
-        if not model:
-            self.model = PairedKidneyModel(
-                hidden_dim=32,
-                num_layers=8
-            )
-            self.model.reset_parameters()
-        else:
-            self.model = model
-        print("Number of parameters: ", sum(p.numel() for p in self.model.parameters()))
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.scheduler = StepLR(self.optimizer, step_size=16, gamma=0.75)
-        self.device = torch.device(device)
-
-        self.model.to(self.device)
-
-        self.probs = []
-
-    def get_action(self, state: dict) -> float:
-        tensor_state = {}
-        for key in state:
-            if not (isinstance(state[key], int) or isinstance(state[key], float)):
-                tensor_state[key] = torch.Tensor(state[key]).to(self.device)
+        # Compute returns and advantages
+        returns = []
+        advantages = []
+        gae = 0
         
-        if sum(state["active_agents"]) == 0: # there are no elements to consider - will break model
-            return {
-                "selection": np.zeros(env.n_agents),
-                "match_selection": 0,
-                "match_regular": 0
-            }
+        for t in reversed(range(len(rewards))):
+            if t == len(rewards) - 1:
+                next_value = 0  # No next state at the end of episode
+            else:
+                next_value = values[t + 1].item()
+                
+            delta = rewards[t].item() + self.discount_factor * next_value - values[t].item()
+            gae = delta + self.discount_factor * self.gae_smoothing * gae
+            
+            returns.insert(0, gae + values[t].item())
+            advantages.insert(0, gae)
+            
+        returns = torch.tensor(returns, device=self.device)
+        advantages = torch.tensor(advantages, device=self.device)
         
+        # Normalize advantages
+        if len(advantages) > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            
+        return observations, actions, returns, advantages, logprobs, probs_list
 
-        item_priority = self.model(tensor_state["adjacency_matrix"], 
-                                   state["timestep"], 
-                                   tensor_state["arrivals"], 
-                                   tensor_state["departures"],
-                                   tensor_state["is_hard_to_match"], 
-                                   state["total_timesteps"], 
-                                   tensor_state["active_agents"])
-        
-        item_priority = item_priority.cpu().detach().numpy()
-
-        # after you've sampled values from the distribution, you have to align them to 0 or 1 for each of them
-        item_priority = (item_priority > 0.5).astype(np.int32)
-        return {
-            "selection": item_priority,
-            "match_selection": 1,
-            "match_regular": 0
-        }
-
-    def sample_action(self, state: dict) -> dict:
-        tensor_state = {}
-        for key in state:
-            if not (isinstance(state[key], int) or isinstance(state[key], float)):
-                tensor_state[key] = torch.Tensor(state[key]).to(self.device)
-        
-        if sum(state["active_agents"]) == 0: # there are no elements to consider - will break model
-            return {
-                "selection": np.zeros(env.n_agents),
-                "match_selection": 0,
-                "match_regular": 0
-            }
-        
-
-        item_priority = self.model(tensor_state["adjacency_matrix"], 
-                                   state["timestep"], 
-                                   tensor_state["arrivals"], 
-                                   tensor_state["departures"],
-                                   tensor_state["is_hard_to_match"], 
-                                   state["total_timesteps"], 
-                                   tensor_state["active_agents"])
-        item_priority_distrib = Normal(item_priority, 0.1)
-        item_priority = item_priority_distrib.sample()
-
-        self.probs.append(item_priority_distrib.log_prob(item_priority).flatten())
-
-        item_priority = item_priority.cpu().detach().numpy()
-
-        # after you've sampled values from the distribution, you have to align them to 0 or 1 for each of them
-        item_priority = (item_priority > 0.5).astype(np.int32)
-        return {
-            "selection": item_priority,
-            "match_selection": 1,
-            "match_regular": 0
-        }
-
-    def update(self, rewards) -> None:
-        reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        
-        if len(rewards) > 1:
-            reward_tensor = (reward_tensor - reward_tensor.mean()) / (reward_tensor.std() + 1e-8)
-        
-        log_probs = torch.stack(self.probs)
-
+    def update(self, observations, actions, returns, advantages, old_logprobs, old_probs):
+        # PPO update with clipping
         policy_loss = 0
-        for i, r in enumerate(reward_tensor):
-            episode_log_probs = log_probs[i]
-            policy_loss += -torch.mean(episode_log_probs) * r
+        value_loss = 0
         
-        policy_loss /= len(rewards)        
+        for obs, action, ret, adv, old_logprob, old_prob in zip(observations, actions, returns, advantages, old_logprobs, old_probs):
+            if obs["active_agents"].sum() == 0:
+                continue
+                
+            # Get new action probabilities and value estimate
+            new_probs = self.actor_model(obs).squeeze(-1)
+            new_probs = torch.clamp(new_probs, 1e-6, 1.0 - 1e-6)
+            distribution = Bernoulli(probs=new_probs)
+            new_logprob = distribution.log_prob(action).sum()
+            value = self.critic_model(obs)
+            
+            # Calculate ratio for PPO clipping
+            ratio = torch.exp(new_logprob - old_logprob)
+            
+            # Clipped surrogate objective
+            clip_adv = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv
+            policy_loss += -torch.min(ratio * adv, clip_adv)
+            
+            # Value loss
+            value_loss += (ret - value) ** 2
+            
+        policy_loss /= max(1, len(observations))
+        value_loss /= max(1, len(observations))
+        
+        # Total loss
+        loss = policy_loss + 0.5 * value_loss
+        
+        # Perform optimization step
         self.optimizer.zero_grad()
-        policy_loss.backward()
-
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        loss.backward()
+        # Optional: gradient clipping
+        torch.nn.utils.clip_grad_norm_(list(self.actor_model.parameters()) + list(self.critic_model.parameters()), 0.5)
         self.optimizer.step()
-        self.scheduler.step()
         
-        self.probs = []
-
-
-# MPS has some issues when trying to compute the loss
+        return policy_loss.item(), value_loss.item()
 
 # training constants
 episodes_per_env = 256
-eval_lookback = 8
-eval_period = 8
-batch_size = 8
+eval_every = 16
+num_eval_runs = 4
     
-agent = REINFORCE(
+agent = PPO(
     device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
 )
 
 envs = [
     PairedKidneyDonationEnv(
         n_agents=1000,
-        n_timesteps=180,
-        criticality_rate=90
+        n_timesteps=36,
+        criticality_rate=18
     )
 ]
 
-
-
-for env in envs:
-    reward_over_episodes = []
-    recent_greedy_rewards = []
-    recent_patient_rewards = []
-    recent_rewards = []
-    for episode in tqdm(range(episodes_per_env)):
-        obs, info = env.reset()
-        done = False
-
-        while not done:
-            action = agent.sample_action(obs)
-            obs, reward, done, _, info = env.step(action)
-        greedy_reward = get_greedy_percentage(env)
-        advantage = reward - greedy_reward
-        shaped_reward = reward + 0.25 * advantage # trying to adjust for the greedy reward
-
-        reward_over_episodes.append(reward)
-        recent_rewards.append(shaped_reward)
-
-        if len(recent_rewards) >= batch_size:
-            agent.update(recent_rewards)
-            recent_rewards = []
-
-        if ((episode + 1) % eval_period) >= (eval_period - eval_lookback):
-            recent_greedy_rewards.append(greedy_reward)
-            recent_patient_rewards.append(get_patient_percentage(env))
-
-        if (episode + 1) % eval_period == 0:
-            mean_reward = np.mean(reward_over_episodes[-eval_lookback:])
-            mean_greedy_reward = np.mean(recent_greedy_rewards)
-            mean_patient_reward = np.mean(recent_patient_rewards)
-
-            print(f"Episode {episode + 1}: "
-                f"avg reward = {mean_reward:.2f}, "
-                f"greedy = {mean_greedy_reward:.2f}")
-
-            recent_greedy_rewards.clear()
-            recent_patient_rewards.clear()
-
-    eval_greedy_rewards = []
+def eval_model(env, agent, num_runs):
+    agent.actor_model.eval()
+    agent.critic_model.eval()
+    
     eval_model_rewards = []
+    eval_greedy_rewards = []
     eval_patient_rewards = []
- 
-    for i in tqdm(range(64)):
+
+    for i in tqdm(range(num_runs)):
         obs, info = env.reset()
         done = False
-
+        reward = 0  # Initialize reward
         while not done:
+            # Get binary actions from the model
             action = agent.get_action(obs)
             obs, reward, done, _, info = env.step(action)
-        greedy_reward = get_greedy_percentage(env)
-        patient_reward = get_patient_percentage(env)
-
-        eval_greedy_rewards.append(greedy_reward)
-        eval_patient_rewards.append(patient_reward)
         eval_model_rewards.append(reward)
-    
-    with open("model_results.json", "w+") as f:
-        f.write(json.dumps(
-            {
-                "reward": eval_model_rewards,
-                "greedy_reward": eval_greedy_rewards,
-                "patient_reward": eval_patient_rewards,
-            }
-        ))
+        eval_greedy_rewards.append(get_greedy_percentage(env))
+        eval_patient_rewards.append(get_patient_percentage(env))
+
+    return {
+        "model": eval_model_rewards,
+        "greedy": eval_greedy_rewards,
+        "patient": eval_patient_rewards,
+    }
+
+for env in envs:
+    for episode in tqdm(range(episodes_per_env)):
+        env.reset()
+        observations, actions, returns, advantages, logprobs, probs_list = agent.compute_values_for_episode(env)
+        policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, probs_list)
+
+        if (episode + 1) % agent.scheduler.step_size == 0:
+            agent.scheduler.step()
+
+        if (episode + 1) % eval_every == 0:
+            evaluations = eval_model(env, agent, num_runs=num_eval_runs)
+            mean_eval_greedy_reward = np.mean(evaluations["greedy"])
+            mean_eval_patient_reward = np.mean(evaluations["patient"])
+            mean_eval_model_reward = np.mean(evaluations["model"])
+
+            print(f"Evaluation {episode + 1}: "
+                f"avg reward = {mean_eval_model_reward:.2f}, "
+                f"greedy = {mean_eval_greedy_reward:.2f}, "
+                f"patient = {mean_eval_patient_reward:.2f}")
+        
+    with open("model_results.json", "w+") as f: # the values we are writing here should be from the last round
+        f.write(json.dumps({
+            "greedy": evaluations["greedy"],
+            "patient": evaluations["patient"],
+            "model": evaluations["model"]
+        }))
 
 
     env.close()
 
-torch.save(agent.model.state_dict(), "model.pth")
+torch.save(agent.actor_model.state_dict(), "actor_model.pth")
+torch.save(agent.critic_model.state_dict(), "critic_model.pth")

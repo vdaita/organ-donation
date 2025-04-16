@@ -24,12 +24,7 @@ class PairedKidneyDonationEnv(gym.Env):
             "timestep": Discrete(n_timesteps)
         })
 
-        self.action_space = Dict({
-            "selection": MultiBinary(n_agents), # which agents should be matched selectively
-            "match_selection": Discrete(2, start=0), # whether or not the selectively matched points should be matched
-            "match_regular": Discrete(2, start=0) # whether or not the regular points should be matched at this timestep
-        })
-
+        self.action_space = MultiBinary(n_agents)
         self.compatibility = np.zeros((n_agents, n_agents))
         self.arrival_times = np.zeros(n_agents)
         self.real_departure_times = np.zeros(n_agents) # currently, we assume that each individual leaves the market after the same amount of time (w/ distribution)
@@ -77,6 +72,7 @@ class PairedKidneyDonationEnv(gym.Env):
         self.real_departure_times = np.minimum((self.arrival_times + criticality_durations).astype(int), self.n_timesteps - 1)
 
         self.active_agents = np.zeros(self.n_agents)
+        self.matched_agents = np.zeros(self.n_agents)
         end_time = time.time()
 
         if options and "should_log" in options and options["should_log"]:
@@ -121,10 +117,6 @@ class PairedKidneyDonationEnv(gym.Env):
             "active_agents": self.active_agents,
             "total_timesteps": self.n_timesteps
         }
-    
-    def get_reward(self):
-        return (self.matched_pairs * 2 / self.n_agents) / self.theoretical_max
-
     def clear_node_edges(self, node):
         """Clear all edges connected to a specific node without removing the node."""
         if self.current_graph.has_node(node):
@@ -134,9 +126,10 @@ class PairedKidneyDonationEnv(gym.Env):
             self.current_graph.remove_edges_from(edges_to_remove)
 
     def step(self, action):
-        # check if the priority nodes should be matched
-        if action["match_selection"] == 1:
-            priority_nodes = np.where(action["selection"] == 1)[0]
+        previous_matched = self.matched_pairs
+        if action.sum() > 0:
+            # check if the priority nodes should be matched
+            priority_nodes = np.where(action == 1)[0]
             # Only proceed if there are selected priority nodes that are active
             if len(priority_nodes) > 0:
                 # Create a subgraph with only the selected priority nodes and their neighbors
@@ -151,18 +144,18 @@ class PairedKidneyDonationEnv(gym.Env):
                                 # Add the reverse edge if it exists
                                 if self.current_graph.has_edge(neighbor, node):
                                     selected_subgraph.add_edge(neighbor, node)
-                
+            
                 # Convert to undirected graph for matching
                 undirected_subgraph = nx.Graph()
                 for u, v in selected_subgraph.edges():
                     # Only add edge if there's mutual compatibility
                     if selected_subgraph.has_edge(v, u):
                         undirected_subgraph.add_edge(u, v)
-                
+            
                 # Find the best matching in this graph
                 best_priority_matching = nx.max_weight_matching(undirected_subgraph, maxcardinality=True)
                 self.matched_pairs += len(best_priority_matching)
-                
+            
                 # Clear edges for matched nodes
                 for u, v in best_priority_matching:
                     self.clear_node_edges(u)
@@ -171,27 +164,6 @@ class PairedKidneyDonationEnv(gym.Env):
                     self.clear_node_edges(v)
                     self.active_agents[v] = 0
                     self.matched_agents[v] = 1
-
-        if action["match_regular"] == 1:
-            # Convert to undirected graph for matching (only using active agents)
-            undirected_graph = nx.Graph()
-            active_nodes = [node for node in self.current_graph.nodes() if self.active_agents[node] == 1]
-            for u in active_nodes:
-                for v in self.current_graph.successors(u):
-                    if v in active_nodes and self.current_graph.has_edge(v, u):
-                        undirected_graph.add_edge(u, v)
-            
-            best_regular_matching = nx.max_weight_matching(undirected_graph, maxcardinality=True)
-            self.matched_pairs += len(best_regular_matching)
-            
-            # Clear edges for matched nodes
-            for u, v in best_regular_matching:
-                self.clear_node_edges(u)
-                self.active_agents[u] = 0
-                self.clear_node_edges(v)
-                self.active_agents[v] = 0
-                self.matched_agents[u] = 1
-                self.matched_agents[v] = 1
 
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
@@ -216,7 +188,10 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_step += 1
         done = self.current_step == self.n_timesteps
 
-        return self.get_observation(), self.get_reward(), done, done, self.get_info()
+        # calculate reward
+        reward = ((np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents) / self.theoretical_max
+
+        return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
         num_hard_matched = sum([1 for i in range(self.n_agents) 
