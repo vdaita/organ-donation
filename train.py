@@ -15,8 +15,8 @@ from aim import Run
 
 lr = 1e-4
 weight_decay = 1e-5
-schdeuler_step_size = 64
-scheduler_gamma = 0.5
+schdeuler_step_size = 32
+scheduler_gamma = 0.75
 
 class PPO:
     def __init__(self, num_layers=6, hidden_dim=32, device="cpu"):
@@ -38,7 +38,7 @@ class PPO:
         )
 
         self.discount_factor = 0.98
-        self.gae_smoothing = 0.95
+        self.gae_smoothing = 0.9
         self.clip_ratio = 0.2  # PPO clipping parameter
         self.max_grad_norm = 0.5  # For gradient clipping
 
@@ -280,26 +280,13 @@ def eval_model(env, agent, num_runs):
     }
 
 for env in envs:
-    obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer = [], torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
 
     for episode in tqdm(range(episodes_per_env)):
         observations, actions, returns, advantages, logprobs, values = agent.compute_values_for_episode(env)
-
-        obs_buffer.extend(observations)
-        action_buffer = torch.cat([action_buffer, actions], dim=0)
-        returns_buffer = torch.cat([returns_buffer, returns], dim=0)
-        advantages_buffer = torch.cat([advantages_buffer, advantages], dim=0)
-        logprobs_buffer = torch.cat([logprobs_buffer, logprobs], dim=0)
-        values_buffer = torch.cat([values_buffer, values], dim=0)
-
-        if (episode + 1) % batch_size == 0:
-            policy_loss, value_loss = agent.update(obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer)
-            obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer = [], torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
-
-            run.track(policy_loss, name="policy_loss", step=episode)
-            run.track(value_loss, name="value_loss", step=episode)
-            
-            agent.scheduler.step()
+        policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, values)
+        run.track(policy_loss, name="policy_loss", step=episode)
+        run.track(value_loss, name="value_loss", step=episode)
+        agent.scheduler.step()
 
         if (episode + 1) % eval_every == 0:
             evaluations = eval_model(env, agent, num_runs=num_eval_runs)
