@@ -13,7 +13,7 @@ from torch_geometric.nn import GAT, global_mean_pool
 from copy import deepcopy
 from aim import Run
 
-lr = 1e-4
+lr = 1e-3
 weight_decay = 1e-5
 num_layers = 3
 hidden_dim = 32
@@ -269,7 +269,7 @@ def eval_model(env, agent, num_runs):
     eval_patient_rewards = []
 
     for i in tqdm(range(num_runs)):
-        obs, info = env.reset()
+        obs, info = env.reset(options={"should_log": False})
         done = False
         reward = 0  # Initialize reward
         while not done:
@@ -294,7 +294,7 @@ for env in envs:
         run.track(policy_loss, name="policy_loss", step=episode)
         run.track(value_loss, name="value_loss", step=episode)
 
-        if (episode + 1) % eval_every == 0:
+        if (episode) % eval_every == 0:
             evaluations = eval_model(env, agent, num_runs=num_eval_runs)
             mean_eval_greedy_reward = np.mean(evaluations["greedy"])
             mean_eval_patient_reward = np.mean(evaluations["patient"])

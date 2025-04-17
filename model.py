@@ -12,7 +12,7 @@ class PairedKidneyBackbone(nn.Module):
         self.num_layers = num_layers
 
         self.embedding = nn.Sequential(
-            nn.Linear(3, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
+            nn.Linear(23, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
         self.gat = GATv2Conv(hidden_dim, hidden_dim, heads=4, concat=False)
@@ -55,7 +55,7 @@ class PairedKidneyBackbone(nn.Module):
         relevant_arrivals = arrival[masked_indices]
         relevant_departures = departure[masked_indices]
         timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
-        
+                
         # Add epsilon to avoid division by zero
         time_diff = relevant_departures - relevant_arrivals
         time_diff = torch.clamp(time_diff, min=1.0)  # Avoid division by zero
@@ -63,11 +63,21 @@ class PairedKidneyBackbone(nn.Module):
 
         time_until_departure = relevant_departures - timestep_expanded
         about_to_leave = (time_until_departure <= 1).float()
+
+        # Create time indicators for progress
+        num_bins = 20 
+        bin_size = 1.0 / num_bins
+        time_indicators = torch.zeros((num_active, num_bins), device=device)
+        for i, progress in enumerate(relevant_progress):
+            bin_idx = min(int(progress / bin_size), num_bins - 1)
+            time_indicators[i, bin_idx] = 1.0
+
         
         in_data = torch.concat([
             relevant_progress.unsqueeze(1), 
             is_hard_to_match[masked_indices].unsqueeze(1),
-            about_to_leave.unsqueeze(1)
+            about_to_leave.unsqueeze(1),
+            time_indicators
         ], dim=1)
 
         x = self.embedding(in_data)
