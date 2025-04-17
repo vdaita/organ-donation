@@ -25,6 +25,7 @@ class PairedKidneyDonationEnv(gym.Env):
         })
 
         self.action_space = MultiBinary(n_agents)
+
         self.compatibility = np.zeros((n_agents, n_agents))
         self.arrival_times = np.zeros(n_agents)
         self.real_departure_times = np.zeros(n_agents) # currently, we assume that each individual leaves the market after the same amount of time (w/ distribution)
@@ -66,6 +67,7 @@ class PairedKidneyDonationEnv(gym.Env):
         cumulative_times = np.cumsum(inter_arrival_times)
         scaled_times = (cumulative_times / np.max(cumulative_times) * (self.n_timesteps * 0.9)).astype(int)
         self.arrival_times = np.clip(scaled_times, 0, self.n_timesteps-1)
+        self.arrival_times[0] = 0
         
         # Generate departure times based on arrival times plus criticality duration
         criticality_durations = self.np_random.exponential(self.criticality_rate, self.n_agents)
@@ -115,6 +117,7 @@ class PairedKidneyDonationEnv(gym.Env):
             "departures": self.real_departure_times,
             "is_hard_to_match": self.is_hard_to_match,
             "active_agents": self.active_agents,
+            "matched_agents": self.matched_agents,
             "total_timesteps": self.n_timesteps
         }
     def clear_node_edges(self, node):
@@ -188,8 +191,12 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_step += 1
         done = self.current_step == self.n_timesteps
 
-        # calculate reward
-        reward = ((np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents) / self.theoretical_max
+
+        # calculate reward - fix division by zero issue
+        if self.theoretical_max > 0:
+            reward = ((np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents) / self.theoretical_max
+        else:
+            reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
 
         return self.get_observation(), reward, done, done, self.get_info()
     

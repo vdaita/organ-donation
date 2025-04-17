@@ -179,5 +179,5 @@ if __name__ == "__main__":
 
             simulation_results.append(simulation_result)    
 
-    with open("simulation_results.json", "w") as f:
+    with open("results/simulation_results.json", "w") as f:
         json.dump(simulation_results, f, indent=4)        

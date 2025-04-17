@@ -1,4 +1,4 @@
-from torch_geometric.nn import GAT, global_mean_pool
+from torch_geometric.nn import GAT, GATv2Conv, global_mean_pool
 from torch import nn
 import torch
 import torch.nn.functional as F
@@ -15,7 +15,7 @@ class PairedKidneyModel(nn.Module):
             nn.Linear(2, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
-        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim, num_layers=num_layers)
+        self.gat = GATv2Conv(hidden_dim, hidden_dim, heads=4, concat=False)
         self.select_fc = nn.Linear((hidden_dim), 1)
     
         self.device = next(self.parameters()).device
@@ -41,12 +41,21 @@ class PairedKidneyModel(nn.Module):
         if torch.sum(active_agents) == 0:
             return torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
         
-        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze()
+        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze(1)
+        
+        if masked_indices.dim() == 0:
+            masked_indices = masked_indices.unsqueeze(0)
+            
         num_active = masked_indices.size(0)            
         relevant_arrivals = arrival[masked_indices]
         relevant_departures = departure[masked_indices]
         timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
-        relevant_progress = (timestep_expanded - relevant_arrivals) / (relevant_departures - relevant_arrivals)
+        
+        # Add epsilon to avoid division by zero
+        time_diff = relevant_departures - relevant_arrivals
+        time_diff = torch.clamp(time_diff, min=1.0)  # Avoid division by zero
+        relevant_progress = (timestep_expanded - relevant_arrivals) / time_diff
+        
         in_data = torch.concat([
             relevant_progress.unsqueeze(1), 
             is_hard_to_match[masked_indices].unsqueeze(1)
@@ -56,9 +65,17 @@ class PairedKidneyModel(nn.Module):
         
         adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
         edge_index = adj_matrix_revised.nonzero(as_tuple=False).t()
-
-        x = x + self.gat(x, edge_index) # adding residual
-        x = F.layer_norm(x, x.size()[1:]) # layer normalization
+        
+        # Only perform GAT if there are edges in the graph
+        if edge_index.shape[1] > 0:
+            x = x + self.gat(x, edge_index) # adding residual
+        
+        # Using try-except to catch potential errors in layer normalization
+        try:
+            x = F.layer_norm(x, x.size()[1:]) # layer normalization
+        except Exception:
+            # If layer norm fails, just proceed without it
+            pass
 
         x = self.select_fc(x)
         x = F.sigmoid(x)
@@ -103,12 +120,21 @@ class PairedKidneyCriticModel(nn.Module):
         if torch.sum(active_agents) == 0:
             return 0
         
-        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze()
+        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze(1)
+        
+        if masked_indices.dim() == 0:
+            masked_indices = masked_indices.unsqueeze(0)
+            
         num_active = masked_indices.size(0)            
         relevant_arrivals = arrival[masked_indices]
         relevant_departures = departure[masked_indices]
         timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
-        relevant_progress = (timestep_expanded - relevant_arrivals) / (relevant_departures - relevant_arrivals)
+        
+        # Add epsilon to avoid division by zero
+        time_diff = relevant_departures - relevant_arrivals
+        time_diff = torch.clamp(time_diff, min=1.0)  # Avoid division by zero
+        relevant_progress = (timestep_expanded - relevant_arrivals) / time_diff
+        
         in_data = torch.concat([
             relevant_progress.unsqueeze(1), 
             is_hard_to_match[masked_indices].unsqueeze(1)
@@ -118,9 +144,17 @@ class PairedKidneyCriticModel(nn.Module):
         
         adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
         edge_index = adj_matrix_revised.nonzero(as_tuple=False).t()
-
-        x = x + self.gat(x, edge_index) # adding residual
-        x = F.layer_norm(x, x.size()[1:]) # layer normalization
+        
+        # Only perform GAT if there are edges in the graph
+        if edge_index.shape[1] > 0:
+            x = x + self.gat(x, edge_index) # adding residual
+        
+        # Using try-except to catch potential errors in layer normalization
+        try:
+            x = F.layer_norm(x, x.size()[1:]) # layer normalization
+        except Exception:
+            # If layer norm fails, just proceed without it
+            pass
         
         batch = torch.zeros_like(relevant_arrivals, dtype=torch.long, device=adj_matrix.device)
         x = global_mean_pool(x, batch=batch)
