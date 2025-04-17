@@ -5,6 +5,20 @@ from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscr
 import matplotlib.pyplot as plt
 from typing import Tuple, Optional
 import time
+import math
+
+class PairedKidneyLargeCycleDonationEnv(gym.Env):
+    def __init__(self, n_agents=1000, p=math.sqrt(0.037), q=math.sqrt(0.087), pct_hard=0.3, arrival_rate=1, criticality_rate=400, n_timesteps=700):
+        self.n_agents, self.p, self.q, self.pct_hard, self.arrival_rate, self.criticality_rate, self.n_timesteps = n_agents, p, q, pct_hard, arrival_rate, criticality_rate, n_timesteps
+        self.observation_space = Dict({
+            "adjacency_matrix": MultiBinary((n_agents, n_agents)),
+            "timestep": Discrete(n_timesteps)
+        })
+        self.action_space = MultiBinary(n_agents)
+
+        self.compatibility = np.zeros((n_agents, n_agents))
+        self.arrival_times = np.zeros(n_agents)
+        self.real_departure_times = np.zeros(n_agents)
 
 class PairedKidneyDonationEnv(gym.Env):
     def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.3, arrival_rate=1, criticality_rate=400, n_timesteps=700):

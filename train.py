@@ -15,8 +15,8 @@ from aim import Run
 
 lr = 1e-4
 weight_decay = 1e-5
-schdeuler_step_size = 32
-scheduler_gamma = 0.75
+num_layers = 3
+hidden_dim = 32
 
 class PPO:
     def __init__(self, num_layers=6, hidden_dim=32, device="cpu"):
@@ -25,16 +25,19 @@ class PPO:
         self.actor_model = PairedKidneyModel(num_layers=num_layers, hidden_dim=hidden_dim)
         self.critic_model = PairedKidneyCriticModel(num_layers=num_layers, hidden_dim=hidden_dim)
 
-        self.optimizer = torch.optim.Adam(
-            list(self.actor_model.parameters()) + list(self.critic_model.parameters()),
+
+        self.actor_optimizer = torch.optim.Adam(
+            self.actor_model.parameters(),
             lr=lr,
             eps=1e-8,
             weight_decay=weight_decay
         )
-        self.scheduler = StepLR(
-            self.optimizer,
-            step_size=schdeuler_step_size,
-            gamma=scheduler_gamma
+
+        self.critic_optimizer = torch.optim.Adam(
+            self.critic_model.parameters(),
+            lr=lr * 3, # apparently this helps the critic converge faster which should help the actor in turn
+            eps=1e-8,
+            weight_decay=weight_decay
         )
 
         self.discount_factor = 0.98
@@ -196,24 +199,27 @@ class PPO:
             
             # Calculate value function loss
             value_loss = 0.5 * ((new_values.squeeze() - returns) ** 2).mean()
-            
-            entropy_mean = -torch.mean(torch.stack(entropies))
-            entropy_bonus = 0.01 * entropy_mean
 
-            # Calculate total loss
-            total_loss = policy_loss + value_loss - entropy_mean
-            
             # Perform backpropagation and optimization
-            self.optimizer.zero_grad()
-            total_loss.backward()
-            
+            self.actor_optimizer.zero_grad()
+            policy_loss.backward()
+
             # Add gradient clipping to prevent exploding gradients
             torch.nn.utils.clip_grad_norm_(
-                list(self.actor_model.parameters()) + list(self.critic_model.parameters()),
+                self.actor_model.parameters(),
                 self.max_grad_norm
             )
+            self.actor_optimizer.step()
+
             
-            self.optimizer.step()
+            self.critic_optimizer.zero_grad()
+            value_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.critic_model.parameters(),
+                self.max_grad_norm
+            )
+
+            self.critic_optimizer.step()
             
             # Track losses
             policy_loss_sum += policy_loss.item()
@@ -226,31 +232,32 @@ class PPO:
 episodes_per_env = 4096
 eval_every = 32
 batch_size = 4
-num_eval_runs = 4
+num_eval_runs = 16
     
 agent = PPO(
     device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
+    num_layers=num_layers,
+    hidden_dim=hidden_dim
 )
 
 envs = [
     PairedKidneyDonationEnv(
         n_agents=500,
-        n_timesteps=36,
-        criticality_rate=18
+        n_timesteps=32,
+        criticality_rate=16
     )
 ]
 
 run = Run()
 run["hparams"] = {
     "learning_rate": lr,
-    "weight_decay": weight_decay,
-    "scheduler_step_size": schdeuler_step_size,
-    "scheduler_gamma": scheduler_gamma,
     "env_agents": envs[0].n_agents,
     "env_timesteps": envs[0].n_timesteps,
     "env_criticality_rate": envs[0].criticality_rate,
     "episodes_per_env": episodes_per_env,
     "batch_size": batch_size,
+    "num_layers": num_layers,
+    "hidden_dim": hidden_dim
 }
 
 def eval_model(env, agent, num_runs):
@@ -286,7 +293,6 @@ for env in envs:
         policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, values)
         run.track(policy_loss, name="policy_loss", step=episode)
         run.track(value_loss, name="value_loss", step=episode)
-        agent.scheduler.step()
 
         if (episode + 1) % eval_every == 0:
             evaluations = eval_model(env, agent, num_runs=num_eval_runs)
