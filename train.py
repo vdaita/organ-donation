@@ -280,20 +280,22 @@ def eval_model(env, agent, num_runs):
     }
 
 for env in envs:
-    obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer = [], [], [], [], [], []
+    obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer = [], torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
 
     for episode in tqdm(range(episodes_per_env)):
         observations, actions, returns, advantages, logprobs, values = agent.compute_values_for_episode(env)
 
-        obs_buffer.append(observations)
-        action_buffer.append(actions)
-        returns_buffer.append(returns)
-        advantages_buffer.append(advantages)
-        logprobs_buffer.append(logprobs)
-        values_buffer.append(values)
+        obs_buffer.extend(observations)
+        action_buffer = torch.cat([action_buffer, actions], dim=0)
+        returns_buffer = torch.cat([returns_buffer, returns], dim=0)
+        advantages_buffer = torch.cat([advantages_buffer, advantages], dim=0)
+        logprobs_buffer = torch.cat([logprobs_buffer, logprobs], dim=0)
+        values_buffer = torch.cat([values_buffer, values], dim=0)
 
-        if ((episode + 1) // batch_size) % agent.scheduler.step_size == 0:
-            policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, values)
+        if (episode + 1) % batch_size == 0:
+            policy_loss, value_loss = agent.update(obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer)
+            obs_buffer, action_buffer, returns_buffer, advantages_buffer, logprobs_buffer, values_buffer = [], torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
+
             run.track(policy_loss, name="policy_loss", step=episode)
             run.track(value_loss, name="value_loss", step=episode)
             
@@ -312,6 +314,9 @@ for env in envs:
             
             model_greedy_ratio = mean_eval_model_reward / mean_eval_greedy_reward
             model_patient_ratio = mean_eval_model_reward / mean_eval_patient_reward
+
+            run.track(model_greedy_ratio, name="model_greedy_ratio", step=episode)
+            run.track(model_patient_ratio, name="model_patient_ratio", step=episode)
         
     with open("results/model_results.json", "w+") as f: # the values we are writing here should be from the last round
         f.write(json.dumps({
