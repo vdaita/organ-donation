@@ -5,8 +5,7 @@ from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscr
 import matplotlib.pyplot as plt
 from typing import Tuple, Optional
 import time
-import math
-    
+
 class PairedKidneyDonationEnv(gym.Env):
     def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.3, arrival_rate=1, criticality_rate=400, n_timesteps=700, use_cycles=False):
         self.n_agents = n_agents
@@ -77,12 +76,6 @@ class PairedKidneyDonationEnv(gym.Env):
         self.matched_agents = np.zeros(self.n_agents)
         end_time = time.time()
 
-        self.current_step = 0
-        self.current_graph = nx.DiGraph()
-        for i in range(self.n_agents):
-            self.current_graph.add_node(i)
-        self.theoretical_max = self.get_theoretical_max()
-
         if options and "should_log" in options and options["should_log"]:
             print(f"Environment reset time: {end_time - start_time:.2f} seconds")
 
@@ -92,9 +85,12 @@ class PairedKidneyDonationEnv(gym.Env):
             print("Arrival times: ", self.arrival_times)
             print("Departure times: ", self.real_departure_times)
 
-            print("Theoretical max: ", self.theoretical_max)
+        self.current_step = 0
+        self.current_graph = nx.DiGraph()
+        for i in range(self.n_agents):
+            self.current_graph.add_node(i)
 
-
+        self.theoretical_max = self.get_theoretical_max()
 
         return self.get_observation(), self.get_info()
 
@@ -106,11 +102,11 @@ class PairedKidneyDonationEnv(gym.Env):
         
         # Reset active agents and matched pairs
         self.active_agents = np.zeros(self.n_agents)
-        for index, value in enumerate(self.arrival_times):
-            if value == 0:
+        for index, i in enumerate(self.arrival_times):
+            if i == 0:
                 self.active_agents[index] = 1
-        self.matched_agents = np.zeros(self.n_agents)
 
+        self.matched_agents = np.zeros(self.n_agents)
         return self.get_observation(), self.get_info()
 
     def get_observation(self):
@@ -133,7 +129,7 @@ class PairedKidneyDonationEnv(gym.Env):
             self.current_graph.remove_edges_from(edges_to_remove)
 
     def step(self, action):
-        previous_matched = np.sum(self.matched_agents)
+        previous_matched = sum(self.matched_agents)
         if action.sum() > 0:
             # check if the priority nodes should be matched
             priority_nodes = np.where(action == 1)[0]
@@ -160,9 +156,15 @@ class PairedKidneyDonationEnv(gym.Env):
                         undirected_subgraph.add_edge(u, v)
             
                 if self.use_cycles:
+                    cycles = self.get_greedy_selected_cycles()
+                    for cycle in cycles:
+                        for node in cycle:
+                            self.clear_node_edges(node)
+                            self.active_agents[node] = 0
+                            self.matched_agents[node] = 1
+                else:
                     # Find the best matching in this graph
                     best_priority_matching = nx.max_weight_matching(undirected_subgraph, maxcardinality=True)
-                
                     # Clear edges for matched nodes
                     for u, v in best_priority_matching:
                         self.clear_node_edges(u)
@@ -171,20 +173,6 @@ class PairedKidneyDonationEnv(gym.Env):
                         self.clear_node_edges(v)
                         self.active_agents[v] = 0
                         self.matched_agents[v] = 1
-                else:
-                    # Find cycles in the selected subgraph
-                    cycles = self.get_greedy_selected_cycles()
-                    for cycle in cycles:
-                        # Match all nodes in the cycle
-                        for i in range(len(cycle)):
-                            u = cycle[i]
-                            v = cycle[(i + 1) % len(cycle)]
-                            self.clear_node_edges(u)
-                            self.active_agents[u] = 0
-                            self.matched_agents[u] = 1
-                            self.clear_node_edges(v)
-                            self.active_agents[v] = 0
-                            self.matched_agents[v] = 1
 
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
@@ -209,10 +197,11 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_step += 1
         done = self.current_step == self.n_timesteps
 
+
+        # calculate reward - fix division by zero issue
         if self.theoretical_max > 0:
             reward = ((np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents) / self.theoretical_max
         else:
-            print("Theoretical max is 0")
             reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
 
         return self.get_observation(), reward, done, done, self.get_info()
@@ -262,7 +251,6 @@ class PairedKidneyDonationEnv(gym.Env):
         """
         Based on arrival/departure rate, construct a bigraph with all possible edges and form maximal pairing.
         Return the maximal proportion of pairs that can be matched.
-        This is only for cycles of size 2
         """
         directed_graph = nx.DiGraph()
         for day in range(self.n_timesteps):

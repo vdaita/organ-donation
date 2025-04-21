@@ -12,6 +12,8 @@ from torch import nn
 from torch_geometric.nn import GAT, global_mean_pool
 from copy import deepcopy
 from aim import Run
+import time
+import os
 
 lr = 1e-3
 weight_decay = 1e-5
@@ -233,6 +235,7 @@ episodes_per_env = 4096
 eval_every = 32
 batch_size = 4
 num_eval_runs = 16
+use_cycles = True
     
 agent = PPO(
     device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
@@ -244,7 +247,8 @@ envs = [
     PairedKidneyDonationEnv(
         n_agents=500,
         n_timesteps=32,
-        criticality_rate=16
+        criticality_rate=16,
+        use_cycles=use_cycles,
     )
 ]
 
@@ -257,7 +261,8 @@ run["hparams"] = {
     "episodes_per_env": episodes_per_env,
     "batch_size": batch_size,
     "num_layers": num_layers,
-    "hidden_dim": hidden_dim
+    "hidden_dim": hidden_dim,
+    "use_cycles": use_cycles
 }
 
 def eval_model(env, agent, num_runs):
@@ -275,7 +280,8 @@ def eval_model(env, agent, num_runs):
         while not done:
             # Get binary actions from the model
             action = agent.get_action(obs)
-            obs, reward, done, _, info = env.step(action)
+            obs, new_reward, done, _, info = env.step(action)
+            reward += new_reward # accumulate reward
         eval_model_rewards.append(reward)
         eval_greedy_rewards.append(get_greedy_percentage(env))
         eval_patient_rewards.append(get_patient_percentage(env))
@@ -286,6 +292,9 @@ def eval_model(env, agent, num_runs):
         "patient": eval_patient_rewards,
     }
 
+timestamp = time.time()
+os.makedirs(f"results/{timestamp}", exist_ok=True)
+
 for env in envs:
 
     for episode in tqdm(range(episodes_per_env)):
@@ -294,7 +303,7 @@ for env in envs:
         run.track(policy_loss, name="policy_loss", step=episode)
         run.track(value_loss, name="value_loss", step=episode)
 
-        if (episode) % eval_every == 0:
+        if (episode + 1) % eval_every == 0:
             evaluations = eval_model(env, agent, num_runs=num_eval_runs)
             mean_eval_greedy_reward = np.mean(evaluations["greedy"])
             mean_eval_patient_reward = np.mean(evaluations["patient"])
@@ -310,8 +319,9 @@ for env in envs:
 
             run.track(model_greedy_ratio, name="model_greedy_ratio", step=episode)
             run.track(model_patient_ratio, name="model_patient_ratio", step=episode)
+
         
-    with open("results/model_results.json", "w+") as f: # the values we are writing here should be from the last round
+    with open(f"results/{timestamp}/model_results.json", "w+") as f: # the values we are writing here should be from the last round
         f.write(json.dumps({
             "greedy": evaluations["greedy"],
             "patient": evaluations["patient"],
@@ -321,5 +331,5 @@ for env in envs:
 
     env.close()
 
-torch.save(agent.actor_model.state_dict(), "results/actor_model.pth")
-torch.save(agent.critic_model.state_dict(), "results/critic_model.pth")
+torch.save(agent.actor_model.state_dict(), f"results/{timestamp}/actor_model.pth")
+torch.save(agent.critic_model.state_dict(), f"results/{timestamp}/critic_model.pth")

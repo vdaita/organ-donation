@@ -14,7 +14,8 @@ def get_greedy_percentage(env: PairedKidneyDonationEnv): # easier to test with P
     reward, done = 0, False
     while not done:
         action = np.ones(env.n_agents)
-        observation, reward, done, _, info = env.step(action)
+        observation, new_reward, done, _, info = env.step(action)
+        reward += new_reward
     env.start_over()
     return reward
 
@@ -25,10 +26,11 @@ def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int)
     while not done:
         if env.current_step % period_timesteps == 0:
             action = np.ones(env.n_agents)
-            obs, reward, done, _, info = env.step(action)
+            obs, new_reward, done, _, info = env.step(action)
         else:
             action = np.zeros(env.n_agents)
-            obs, reward, done, _,  info = env.step(action)
+            obs, new_reward, done, _,  info = env.step(action)
+        reward += new_reward
     env.start_over()
     return reward
 
@@ -39,10 +41,11 @@ def get_periodic_greedy_mixed(env: PairedKidneyDonationEnv, period_timesteps: in
     while not done:
         if env.current_step % period_timesteps == 0:
             action = np.ones(env.n_agents)
-            observation, reward, done, _, info = env.step(action)
+            observation, new_reward, done, _, info = env.step(action)
         else:
             action = env.is_hard_to_match
-            observation, reward, done, _, info = env.step(action)
+            observation, new_reward, done, _, info = env.step(action)
+        reward += new_reward
     env.start_over()
     return reward   
 
@@ -56,7 +59,8 @@ def get_patient_percentage(env: PairedKidneyDonationEnv):
             if env.real_departure_times[i] - env.current_step == 1:
                 selection[i] = 1
         action = selection
-        observation, reward, done, _, info = env.step(action)
+        observation, new_reward, done, _, info = env.step(action)
+        reward += new_reward
     env.start_over()
     return reward   
 
@@ -70,7 +74,8 @@ def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
             if env.real_departure_times[i] - env.current_step == 1 or env.is_hard_to_match[i] == 1:
                 selection[i] = 1
         action = selection
-        observation, reward, done, _, info = env.step(action)
+        observation, new_reward, done, _, info = env.step(action)
+        reward += new_reward
     env.start_over()
     return reward
 
