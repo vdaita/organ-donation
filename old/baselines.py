@@ -87,7 +87,7 @@ if __name__ == "__main__":
         env = PairedKidneyDonationEnv(
             n_agents=agent_count,
             n_timesteps=180,
-            criticality_rate=90
+            death_range=[45,135]
         )
         for simulation in tqdm(range(num_simulations), desc="Simulations", leave=False):
             env.reset(seed=simulation)

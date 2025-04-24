@@ -42,9 +42,9 @@ class PPO:
             weight_decay=weight_decay
         )
 
-        self.discount_factor = 0.98
-        self.gae_smoothing = 0.9
-        self.clip_ratio = 0.2  # PPO clipping parameter
+        self.discount_factor = 1
+        self.gae_smoothing = 0.95
+        self.clip_ratio = 0.1  # PPO clipping parameter
         self.max_grad_norm = 0.5  # For gradient clipping
 
         self.actor_model.to(self.device)
@@ -68,7 +68,7 @@ class PPO:
         mask = torch.isnan(probs)
         if mask.any():
             probs = torch.where(mask, torch.zeros_like(probs), probs)
-        return (probs >= 0.5).float()
+        return (probs >= 0.6).float()
 
     def compute_values_for_episode(self, env: PairedKidneyDonationEnv):
         self.actor_model.train()
@@ -136,6 +136,8 @@ class PPO:
         # Normalize advantages
         if len(advantages) > 1:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if len(returns) > 1:
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
         num_valid_observation = sum([1 for obs in observations if obs["active_agents"].sum() > 0])            
         return observations, actions, returns, advantages, logprobs, values
@@ -195,9 +197,12 @@ class PPO:
             # Calculate surrogate losses
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages
+
+            entropy_reward = torch.mean(torch.stack(entropies))
+            entropy_weight = 0.01
             
             # Calculate policy loss (negative for gradient ascent)
-            policy_loss = -torch.min(surr1, surr2).mean()
+            policy_loss = -torch.min(surr1, surr2).mean() - entropy_weight * entropy_reward
             
             # Calculate value function loss
             value_loss = 0.5 * ((new_values.squeeze() - returns) ** 2).mean()
@@ -231,10 +236,10 @@ class PPO:
         return policy_loss_sum / num_rounds, value_loss_sum / num_rounds
 
 # training constants
-episodes_per_env = 4096
-eval_every = 32
+episodes_per_env = 1736
+eval_every = 24
 batch_size = 4
-num_eval_runs = 16
+num_eval_runs = 10
 use_cycles = True
     
 agent = PPO(
@@ -246,9 +251,12 @@ agent = PPO(
 envs = [
     PairedKidneyDonationEnv(
         n_agents=500,
-        n_timesteps=32,
-        criticality_rate=16,
+        n_timesteps=64,
+        death_range=[4, 8],
         use_cycles=use_cycles,
+        p=0.02,
+        q=0.05,
+        pct_hard=0.7
     )
 ]
 
@@ -257,12 +265,14 @@ run["hparams"] = {
     "learning_rate": lr,
     "env_agents": envs[0].n_agents,
     "env_timesteps": envs[0].n_timesteps,
-    "env_criticality_rate": envs[0].criticality_rate,
+    "env_death_range": envs[0].death_range,
     "episodes_per_env": episodes_per_env,
     "batch_size": batch_size,
     "num_layers": num_layers,
     "hidden_dim": hidden_dim,
-    "use_cycles": use_cycles
+    "use_cycles": use_cycles,
+    "q_hard": envs[0].q,
+    "p_easy": envs[0].p
 }
 
 def eval_model(env, agent, num_runs):
@@ -283,9 +293,13 @@ def eval_model(env, agent, num_runs):
         reward = 0  # Initialize reward
         while not done:
             # Get binary actions from the model
-            action = agent.get_action(obs)
+            if env.current_step == env.n_timesteps - 1:
+                action = torch.ones((env.n_agents,), device=obs["adjacency_matrix"].device)
+            else:
+                action = agent.get_action(obs)
             obs, new_reward, done, _, info = env.step(action)
             reward += new_reward # accumulate reward
+
         eval_model_rewards.append(reward)
         run_waiting_times["model"] = env.get_waiting_time_stats()
         eval_greedy_rewards.append(get_greedy_percentage(env))

@@ -7,39 +7,22 @@ from typing import Tuple, Optional
 import time
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, criticality_rate=400, n_timesteps=700, use_cycles=False):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False):
         self.n_agents = n_agents
 
         self.p = p
         self.q = q
         self.pct_hard = pct_hard
-
-        self.arrival_rate = arrival_rate # agent arrives to market at time t (t dist. exponentially with mean a)
-        self.criticality_rate = criticality_rate # agent arrives to market at time t, becomes critical after Z units of time (Z dist. exponentially with mean d)
-        
+        self.arrival_rate = arrival_rate
+        self.death_range = death_range # simpler way to model people exiting the market
+        self.use_cycles = use_cycles
         self.n_timesteps = n_timesteps
-
         self.observation_space = Dict({
             "adjacency_matrix": MultiBinary((n_agents, n_agents)),
             "timestep": Discrete(n_timesteps)
         })
-
-        self.action_space = MultiBinary(n_agents)
-
-        self.compatibility = np.zeros((n_agents, n_agents))
-        self.arrival_times = np.zeros(n_agents)
-        self.real_departure_times = np.zeros(n_agents) # currently, we assume that each individual leaves the market after the same amount of time (w/ distribution)
-        self.active_agents = np.zeros(n_agents) # 1 if the agent is in the market, 0 otherwise
-        self.is_hard_to_match = np.zeros(n_agents) # 1 if the agent is hard to match, 0 otherwise
-        self.matched_agents = np.zeros(n_agents) # 1 if the agent has been matched, 0 otherwise
-
-        self.current_step = 0
-        self.current_graph = nx.DiGraph()
-        self.theoretical_max = 0
-        self.use_cycles = use_cycles
-
-        self.time_matched = np.ones(n_agents) * -1
         self.seed = -1
+        self.reset()
 
         
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -78,19 +61,18 @@ class PairedKidneyDonationEnv(gym.Env):
         self.arrival_times[0] = 0
         
         # Generate departure times based on arrival times plus criticality duration
-        criticality_durations = self.np_random.exponential(self.criticality_rate, self.n_agents)
-        self.real_departure_times = np.minimum((self.arrival_times + criticality_durations).astype(int), self.n_timesteps - 1)
+        uniform_distributions = self.np_random.uniform(self.death_range[0], self.death_range[1], self.n_agents)
+        self.real_departure_times = np.maximum(self.arrival_times + uniform_distributions, np.ones(self.n_agents) * self.n_timesteps)
 
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
+        self.time_matched = np.ones(self.n_agents) * -1
         end_time = time.time()
 
         if options and "should_log" in options and options["should_log"]:
             print(f"Environment reset time: {end_time - start_time:.2f} seconds")
 
             print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
-            print(f"Average criticality duration: {np.mean(criticality_durations):.2f}")
-
             print("Arrival times: ", self.arrival_times)
             print("Departure times: ", self.real_departure_times)
 
@@ -104,7 +86,7 @@ class PairedKidneyDonationEnv(gym.Env):
         return self.get_observation(), self.get_info()
 
     def start_over(self): # start over in a new environment with a similar setup
-        self.reset(seed=self.seed)
+        return self.reset(seed=self.seed)
 
     def get_observation(self):
         return {
@@ -132,7 +114,8 @@ class PairedKidneyDonationEnv(gym.Env):
         self.time_matched[u] = self.current_step
 
     def step(self, action):
-        previous_matched = sum(self.matched_agents)
+        previous_matched = np.copy(self.matched_agents)
+
         if action.sum() > 0:
             # check if the priority nodes should be matched
             priority_nodes = np.where(action == 1)[0]
@@ -164,9 +147,7 @@ class PairedKidneyDonationEnv(gym.Env):
                         for node in cycle:
                             self.node_matched(node)
                 else:
-                    # Find the best matching in this graph
                     best_priority_matching = nx.max_weight_matching(undirected_subgraph, maxcardinality=True)
-                    # Clear edges for matched nodes
                     for u, v in best_priority_matching:
                        self.node_matched(u)
                        self.node_matched(v)
@@ -193,14 +174,8 @@ class PairedKidneyDonationEnv(gym.Env):
 
         self.current_step += 1
         done = self.current_step == self.n_timesteps
-
-
-        # calculate reward - fix division by zero issue
-        if self.theoretical_max > 0:
-            reward = ((np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents) / self.theoretical_max
-        else:
-            reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
-
+        
+        reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
