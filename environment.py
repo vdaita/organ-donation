@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 import time
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.3, arrival_rate=1, criticality_rate=400, n_timesteps=700, use_cycles=False):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, criticality_rate=400, n_timesteps=700, use_cycles=False):
         self.n_agents = n_agents
 
         self.p = p
@@ -38,6 +38,8 @@ class PairedKidneyDonationEnv(gym.Env):
         self.theoretical_max = 0
         self.use_cycles = use_cycles
 
+        self.time_matched = np.ones(n_agents) * -1
+
         
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -48,7 +50,10 @@ class PairedKidneyDonationEnv(gym.Env):
         
         # Identify agents that are hard to match (e.g., highly sensitized patients)
         hard_indices = self.np_random.choice(self.n_agents, int(self.n_agents * self.pct_hard), replace=False)
+        self.is_hard_to_match = np.zeros(self.n_agents)
         self.is_hard_to_match[hard_indices] = 1
+        # print("Number of hard indices: ", len(hard_indices), "Total agents: ", self.n_agents, "Hard to match proportion: ", sum(self.is_hard_to_match) / self.n_agents)
+
         easy_indices = np.setdiff1d(np.arange(self.n_agents), hard_indices)
 
         random_values = self.np_random.random((self.n_agents, self.n_agents))
@@ -107,6 +112,7 @@ class PairedKidneyDonationEnv(gym.Env):
                 self.active_agents[index] = 1
 
         self.matched_agents = np.zeros(self.n_agents)
+        self.time_matched = np.ones(self.n_agents) * -1
         return self.get_observation(), self.get_info()
 
     def get_observation(self):
@@ -127,6 +133,12 @@ class PairedKidneyDonationEnv(gym.Env):
             edges_to_remove = list(self.current_graph.in_edges(node)) + list(self.current_graph.out_edges(node))
             # Remove all these edges at once
             self.current_graph.remove_edges_from(edges_to_remove)
+
+    def node_matched(self, u):
+        self.clear_node_edges(u)
+        self.active_agents[u] = 0
+        self.matched_agents[u] = 1
+        self.time_matched[u] = self.current_step
 
     def step(self, action):
         previous_matched = sum(self.matched_agents)
@@ -159,20 +171,14 @@ class PairedKidneyDonationEnv(gym.Env):
                     cycles = self.get_greedy_selected_cycles()
                     for cycle in cycles:
                         for node in cycle:
-                            self.clear_node_edges(node)
-                            self.active_agents[node] = 0
-                            self.matched_agents[node] = 1
+                            self.node_matched(node)
                 else:
                     # Find the best matching in this graph
                     best_priority_matching = nx.max_weight_matching(undirected_subgraph, maxcardinality=True)
                     # Clear edges for matched nodes
                     for u, v in best_priority_matching:
-                        self.clear_node_edges(u)
-                        self.active_agents[u] = 0
-                        self.matched_agents[u] = 1
-                        self.clear_node_edges(v)
-                        self.active_agents[v] = 0
-                        self.matched_agents[v] = 1
+                       self.node_matched(u)
+                       self.node_matched(v)
 
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
@@ -218,11 +224,20 @@ class PairedKidneyDonationEnv(gym.Env):
                             if self.is_hard_to_match[i] == 0 and self.arrival_times[i] <= self.current_step])
         
         return {
+            "hard_percentage": sum(self.is_hard_to_match) / self.n_agents,
             "hard_to_match_rate": num_hard_matched / max(1, num_hard_total),
             "regular_match_rate": num_regular_matched / max(1, num_regular_total),
             "active_agents": sum(self.active_agents),
             "total_matched": sum(self.matched_agents)
         }
+
+    def print_info(self, info):
+        print(f"Active agents: {info['active_agents']}")
+        print(f"Hard to match percentage: {info['hard_percentage']:.2f}")
+        print(f"Total matched: {info['total_matched']}")
+        print(f"Hard to match rate: {info['hard_to_match_rate']:.2f}")
+        print(f"Regular match rate: {info['regular_match_rate']:.2f}")
+        print(f"Current step: {self.current_step}/{self.n_timesteps}")
         
     def render(self):
         plt.imshow(self.get_observation()["adjacency_matrix"])
@@ -278,3 +293,39 @@ class PairedKidneyDonationEnv(gym.Env):
         
         matching = nx.max_weight_matching(undirected_graph, maxcardinality=True)
         return (len(matching) * 2) / self.n_agents
+    
+    def get_waiting_time_stats(self):
+        # return a dictionary describing the waiting time of the elements
+        result = {
+            "by_difficulty": []
+        }
+        for difficulty in [0, 1]:
+            relevant_indices = np.where(self.is_hard_to_match == difficulty)[0]
+            relevant_arrivals = self.arrival_times[relevant_indices]
+            relevant_time_matched = self.time_matched[relevant_indices]
+            if len(relevant_indices) > 0:
+                waiting_times = relevant_time_matched - relevant_arrivals
+                waiting_times[relevant_time_matched < 0] = 0
+                avg_waiting_time = np.mean(waiting_times)
+                std_waiting_time = np.std(waiting_times)
+                pct_matched = sum(self.matched_agents[relevant_indices]) / len(relevant_indices)
+            else:
+                pct_matched = 0
+                avg_waiting_time = -1.0
+                std_waiting_time = -1.0
+
+            result["by_difficulty"].append({
+                "difficulty": difficulty,
+                "avg_waiting_time": avg_waiting_time,
+                "std_waiting_time": std_waiting_time,
+                "pct_matched": pct_matched
+            })
+        return result
+    
+    def print_waiting_time_stats(self, waiting_time_stats):
+        for stat in waiting_time_stats["by_difficulty"]:
+            difficulty = "Hard to Match" if stat["difficulty"] == 1 else "Easy to Match"
+            print(f"{difficulty}:")
+            print(f"  Average Waiting Time: {stat['avg_waiting_time']:.2f}")
+            print(f"  Standard Deviation of Waiting Time: {stat['std_waiting_time']:.2f}")
+            print(f"  Percentage Matched: {stat['pct_matched'] * 100:.2f}%")

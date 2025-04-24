@@ -273,7 +273,11 @@ def eval_model(env, agent, num_runs):
     eval_greedy_rewards = []
     eval_patient_rewards = []
 
+    waiting_times = []
+
     for i in tqdm(range(num_runs)):
+        run_waiting_times = {}
+
         obs, info = env.reset(options={"should_log": False})
         done = False
         reward = 0  # Initialize reward
@@ -283,20 +287,35 @@ def eval_model(env, agent, num_runs):
             obs, new_reward, done, _, info = env.step(action)
             reward += new_reward # accumulate reward
         eval_model_rewards.append(reward)
+        run_waiting_times["model"] = env.get_waiting_time_stats()
         eval_greedy_rewards.append(get_greedy_percentage(env))
+        run_waiting_times["greedy"] = env.get_waiting_time_stats()
         eval_patient_rewards.append(get_patient_percentage(env))
+        run_waiting_times["patient"] = env.get_waiting_time_stats()
+
+        if i == num_runs - 1:
+            print("-> Environment info:")
+            env.print_info(env.get_info())
+            print("-> Model waiting time stats:")
+            env.print_waiting_time_stats(run_waiting_times["model"])
+            print("-> Greedy waiting time stats:")
+            env.print_waiting_time_stats(run_waiting_times["greedy"])
+            print("-> Patient waiting time stats:")
+            env.print_waiting_time_stats(run_waiting_times["patient"])
+
+        waiting_times.append(run_waiting_times)
 
     return {
         "model": eval_model_rewards,
         "greedy": eval_greedy_rewards,
         "patient": eval_patient_rewards,
+        "waiting_times": waiting_times
     }
 
 timestamp = time.time()
 os.makedirs(f"results/{timestamp}", exist_ok=True)
 
 for env in envs:
-
     for episode in tqdm(range(episodes_per_env)):
         observations, actions, returns, advantages, logprobs, values = agent.compute_values_for_episode(env)
         policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, values)

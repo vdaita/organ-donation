@@ -16,7 +16,6 @@ def get_greedy_percentage(env: PairedKidneyDonationEnv): # easier to test with P
         action = np.ones(env.n_agents)
         observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
-    env.start_over()
     return reward
 
 def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int):
@@ -31,7 +30,6 @@ def get_periodic_percentage(env: PairedKidneyDonationEnv, period_timesteps: int)
             action = np.zeros(env.n_agents)
             obs, new_reward, done, _,  info = env.step(action)
         reward += new_reward
-    env.start_over()
     return reward
 
 def get_periodic_greedy_mixed(env: PairedKidneyDonationEnv, period_timesteps: int):
@@ -46,7 +44,6 @@ def get_periodic_greedy_mixed(env: PairedKidneyDonationEnv, period_timesteps: in
             action = env.is_hard_to_match
             observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
-    env.start_over()
     return reward   
 
 def get_patient_percentage(env: PairedKidneyDonationEnv):
@@ -61,7 +58,6 @@ def get_patient_percentage(env: PairedKidneyDonationEnv):
         action = selection
         observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
-    env.start_over()
     return reward   
 
 def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
@@ -76,7 +72,6 @@ def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
         action = selection
         observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
-    env.start_over()
     return reward
 
 if __name__ == "__main__":
