@@ -55,13 +55,16 @@ def get_patient_percentage(env: PairedKidneyDonationEnv):
         for i in range(env.n_agents):
             if env.real_departure_times[i] - env.current_step == 1:
                 selection[i] = 1
+        if env.current_step == env.n_timesteps - 1:
+            selection = np.ones(env.n_agents)
+    
         action = selection
         observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
     return reward   
 
 def get_greedy_patient_mixed(env: PairedKidneyDonationEnv):
-    obs, info = env.start_over()
+    obs, info = env.start_over(seed=env.seed)
     reward, done = 0, False
     while not done:
         # check if there are any elements that are just before the timestep when they depart? or they are hard to match?

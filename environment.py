@@ -39,9 +39,15 @@ class PairedKidneyDonationEnv(gym.Env):
         self.use_cycles = use_cycles
 
         self.time_matched = np.ones(n_agents) * -1
+        self.seed = -1
 
+    def start_over(self):
+        return self.reset(seed=self.seed, options=None)
         
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+        if not seed:
+            seed = np.random.randint(0, 2**32 - 1)
+        self.seed = seed
         super().reset(seed=seed)
         
         start_time = time.time()
@@ -97,22 +103,6 @@ class PairedKidneyDonationEnv(gym.Env):
 
         self.theoretical_max = self.get_theoretical_max()
 
-        return self.get_observation(), self.get_info()
-
-    def start_over(self): # start over in a new environment with a similar setup
-        self.current_step = 0
-        self.current_graph = nx.DiGraph()
-        for i in range(self.n_agents):
-            self.current_graph.add_node(i)
-        
-        # Reset active agents and matched pairs
-        self.active_agents = np.zeros(self.n_agents)
-        for index, i in enumerate(self.arrival_times):
-            if i == 0:
-                self.active_agents[index] = 1
-
-        self.matched_agents = np.zeros(self.n_agents)
-        self.time_matched = np.ones(self.n_agents) * -1
         return self.get_observation(), self.get_info()
 
     def get_observation(self):

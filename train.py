@@ -136,6 +136,8 @@ class PPO:
         # Normalize advantages
         if len(advantages) > 1:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if len(returns) > 1:
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
         num_valid_observation = sum([1 for obs in observations if obs["active_agents"].sum() > 0])            
         return observations, actions, returns, advantages, logprobs, values
@@ -195,9 +197,12 @@ class PPO:
             # Calculate surrogate losses
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages
+
+            # Entropy bonus
+            entropy_bonus = torch.stack(entropies).mean()
             
             # Calculate policy loss (negative for gradient ascent)
-            policy_loss = -torch.min(surr1, surr2).mean()
+            policy_loss = -torch.min(surr1, surr2).mean() - 0.01 * entropy_bonus
             
             # Calculate value function loss
             value_loss = 0.5 * ((new_values.squeeze() - returns) ** 2).mean()
@@ -231,7 +236,7 @@ class PPO:
         return policy_loss_sum / num_rounds, value_loss_sum / num_rounds
 
 # training constants
-episodes_per_env = 4096
+episodes_per_env = 1024
 eval_every = 32
 batch_size = 4
 num_eval_runs = 16
@@ -246,8 +251,8 @@ agent = PPO(
 envs = [
     PairedKidneyDonationEnv(
         n_agents=500,
-        n_timesteps=32,
-        criticality_rate=16,
+        n_timesteps=64,
+        criticality_rate=8,
         use_cycles=use_cycles,
     )
 ]
