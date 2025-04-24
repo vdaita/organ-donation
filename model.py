@@ -12,10 +12,10 @@ class PairedKidneyBackbone(nn.Module):
         self.num_layers = num_layers
 
         self.embedding = nn.Sequential(
-            nn.Linear(23, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
+            nn.Linear(26, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
-        self.gat = GATv2Conv(hidden_dim, hidden_dim, heads=4, concat=False)
+        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim * 2, num_layers=num_layers, out_channels=hidden_dim)
         self.ffprocess = nn.ModuleList([
             nn.Linear(hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
@@ -43,6 +43,7 @@ class PairedKidneyBackbone(nn.Module):
         is_hard_to_match = torch.Tensor(obs["is_hard_to_match"]).to(device)
         active_agents = torch.Tensor(obs["active_agents"]).to(device)
 
+
         if torch.sum(active_agents) == 0:
             return torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
         
@@ -55,7 +56,8 @@ class PairedKidneyBackbone(nn.Module):
         relevant_arrivals = arrival[masked_indices]
         relevant_departures = departure[masked_indices]
         timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
-                
+        adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
+
         # Add epsilon to avoid division by zero
         time_diff = relevant_departures - relevant_arrivals
         time_diff = torch.clamp(time_diff, min=1.0)  # Avoid division by zero
@@ -72,12 +74,18 @@ class PairedKidneyBackbone(nn.Module):
             bin_idx = min(int(progress / bin_size), num_bins - 1)
             time_indicators[i, bin_idx] = 1.0
 
+        degree_features = torch.sum(adj_matrix_revised, dim=1, keepdim=True)  # In-degree
+        out_degree = torch.sum(adj_matrix_revised, dim=0).unsqueeze(1)  # Out-degree
+        hard_neighbors = torch.mm(adj_matrix_revised, is_hard_to_match[masked_indices].unsqueeze(1))
         
         in_data = torch.concat([
             relevant_progress.unsqueeze(1), 
             is_hard_to_match[masked_indices].unsqueeze(1),
             about_to_leave.unsqueeze(1),
-            time_indicators
+            time_indicators,
+            degree_features,
+            out_degree,
+            hard_neighbors
         ], dim=1)
 
         x = self.embedding(in_data)

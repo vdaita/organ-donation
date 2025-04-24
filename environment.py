@@ -80,9 +80,6 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_graph = nx.DiGraph()
         for i in range(self.n_agents):
             self.current_graph.add_node(i)
-
-        self.theoretical_max = self.get_theoretical_max()
-
         return self.get_observation(), self.get_info()
 
     def start_over(self): # start over in a new environment with a similar setup
@@ -176,6 +173,9 @@ class PairedKidneyDonationEnv(gym.Env):
         done = self.current_step == self.n_timesteps
         
         reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
+        prev_hard = np.sum(previous_matched * self.is_hard_to_match)
+        curr_hard = np.sum(self.matched_agents * self.is_hard_to_match)
+        reward += ((curr_hard - prev_hard) / self.n_agents) * 3
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
@@ -227,38 +227,6 @@ class PairedKidneyDonationEnv(gym.Env):
                     # No cycle found starting from this node
                     continue
         return cycles
-
-    def get_theoretical_max(self) -> float: 
-        """
-        Based on arrival/departure rate, construct a bigraph with all possible edges and form maximal pairing.
-        Return the maximal proportion of pairs that can be matched.
-        """
-        directed_graph = nx.DiGraph()
-        for day in range(self.n_timesteps):
-            arrivals_today = np.where(self.arrival_times == day)[0]
-
-            for agent_idx in arrivals_today:
-                directed_graph.add_node(agent_idx)
-
-                for other_agent in directed_graph.nodes():
-                    if other_agent != agent_idx:
-                        if self.real_departure_times[other_agent] <= day: # is their departure time before my arrival time?
-                            continue
-
-                        if self.compatibility[agent_idx, other_agent] == 1:
-                            directed_graph.add_edge(agent_idx, other_agent)
-                        if self.compatibility[other_agent, agent_idx] == 1:
-                            directed_graph.add_edge(other_agent, agent_idx)
-        
-        # Convert to undirected graph for matching (only including mutual compatibility)
-        undirected_graph = nx.Graph()
-        for u, v in directed_graph.edges():
-            # Only add edge if there's mutual compatibility
-            if directed_graph.has_edge(v, u):
-                undirected_graph.add_edge(u, v)
-        
-        matching = nx.max_weight_matching(undirected_graph, maxcardinality=True)
-        return (len(matching) * 2) / self.n_agents
     
     def get_waiting_time_stats(self):
         # return a dictionary describing the waiting time of the elements

@@ -7,7 +7,7 @@ import gymnasium as gym
 from tqdm import tqdm
 from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
 import json
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from torch import nn
 from torch_geometric.nn import GAT, global_mean_pool
 from copy import deepcopy
@@ -15,8 +15,8 @@ from aim import Run
 import time
 import os
 
-lr = 1e-3
-weight_decay = 1e-5
+lr = 1e-4
+weight_decay = 1e-4
 num_layers = 3
 hidden_dim = 32
 
@@ -42,7 +42,22 @@ class PPO:
             weight_decay=weight_decay
         )
 
-        self.discount_factor = 1
+        self.actor_scheduler = ReduceLROnPlateau(
+            self.actor_optimizer,
+            mode='min',
+            factor=0.5,
+            patience=20,
+            verbose=True
+        )
+        self.critic_scheduler = ReduceLROnPlateau(
+            self.critic_optimizer,
+            mode='min',
+            factor=0.5,
+            patience=20,
+            verbose=True
+        )
+
+        self.discount_factor = 0.995
         self.gae_smoothing = 0.95
         self.clip_ratio = 0.1  # PPO clipping parameter
         self.max_grad_norm = 0.5  # For gradient clipping
@@ -68,7 +83,7 @@ class PPO:
         mask = torch.isnan(probs)
         if mask.any():
             probs = torch.where(mask, torch.zeros_like(probs), probs)
-        return (probs >= 0.6).float()
+        return (probs >= 0.5).float()
 
     def compute_values_for_episode(self, env: PairedKidneyDonationEnv):
         self.actor_model.train()
@@ -191,18 +206,19 @@ class PPO:
             
             # Calculate ratios for PPO clipping
             ratios = torch.exp(new_logprobs - old_logprobs)
-            # Clip ratios to prevent numerical instability 
-            ratios = torch.clamp(ratios, 0.0, 10.0)
-            
-            # Calculate surrogate losses
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages
 
+            kl_div_penalty_coeff = 0.01
+            kl_div = (old_logprobs - new_logprobs).mean()
+            kl_div_penalty = kl_div_penalty_coeff * kl_div
+            run.track(kl_div_penalty.item(), name="kl_div_penalty", step=episode)
+
             entropy_reward = torch.mean(torch.stack(entropies))
-            entropy_weight = 0.01
+            entropy_weight = 0.03
             
             # Calculate policy loss (negative for gradient ascent)
-            policy_loss = -torch.min(surr1, surr2).mean() - entropy_weight * entropy_reward
+            policy_loss = -torch.min(surr1, surr2).mean() - entropy_weight * entropy_reward + kl_div_penalty
             
             # Calculate value function loss
             value_loss = 0.5 * ((new_values.squeeze() - returns) ** 2).mean()
@@ -217,6 +233,7 @@ class PPO:
                 self.max_grad_norm
             )
             self.actor_optimizer.step()
+            self.actor_scheduler.step(policy_loss)
 
             
             self.critic_optimizer.zero_grad()
@@ -227,6 +244,7 @@ class PPO:
             )
 
             self.critic_optimizer.step()
+            self.critic_scheduler.step(value_loss)
             
             # Track losses
             policy_loss_sum += policy_loss.item()
@@ -236,7 +254,7 @@ class PPO:
         return policy_loss_sum / num_rounds, value_loss_sum / num_rounds
 
 # training constants
-episodes_per_env = 1736
+episodes_per_env = 1024
 eval_every = 24
 batch_size = 4
 num_eval_runs = 10
@@ -250,7 +268,7 @@ agent = PPO(
 
 envs = [
     PairedKidneyDonationEnv(
-        n_agents=500,
+        n_agents=250,
         n_timesteps=64,
         death_range=[4, 8],
         use_cycles=use_cycles,
