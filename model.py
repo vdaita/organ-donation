@@ -23,6 +23,15 @@ def get_feature_tensor(obs):
     timestep = timestep.unsqueeze(1).repeat(1, N)
     total_timesteps = total_timesteps.unsqueeze(1).repeat(1, N)
 
+    active_agents_count = torch.tensor(torch.sum(active_agents, dim=1))
+    active_agents_count = active_agents_count / active_agents.shape[1]
+    # print("active_agents_count: ", active_agents_count.shape)
+    active_agents_count = active_agents_count.unsqueeze(1)
+    active_agents_count = active_agents_count.unsqueeze(1)
+    # print("active_agents_count: ", active_agents_count.shape)
+    active_agents_count = active_agents_count.repeat(1, 1, N)
+    # print("active_agents_count: ", active_agents_count.shape)
+
     time_since_arrival = (timestep - arrival) / (departure - arrival)
     time_since_start = timestep / total_timesteps
 
@@ -47,6 +56,7 @@ def get_feature_tensor(obs):
         time_since_start,
         multiples,
         is_hard_to_match,
+        active_agents_count
     ], dim=1)
 
     node_features = node_features.transpose(-1, -2)
@@ -61,7 +71,7 @@ class PairedKidneyBackbone(nn.Module):
         self.num_layers = num_layers
  
         self.embedding = nn.Sequential(
-            nn.Linear(6, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
+            nn.Linear(7, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
         self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim * 2, num_layers=num_layers, out_channels=hidden_dim)

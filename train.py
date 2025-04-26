@@ -27,7 +27,7 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = False
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_project_name: str = "cleanRL"
     """the wandb's project name"""
@@ -102,7 +102,6 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         probs = self.actor(x)
-        print("Probs shape: ", probs.shape)
         probs = Bernoulli(probs=probs)
         if action is None:
             action = probs.sample()
