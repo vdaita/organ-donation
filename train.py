@@ -38,7 +38,7 @@ class Args:
     # Algorithm specific arguments
     total_timesteps: int = 163800
     """total timesteps of the experiments"""
-    learning_rate: float = 1e-4
+    learning_rate: float = 3e-5
     """the learning rate of the optimizer"""
     num_envs: int = 4
     """the number of parallel game environments"""
@@ -46,7 +46,7 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.995
+    gamma: float = 0.998
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -68,6 +68,7 @@ class Args:
     """the maximum norm for the gradient clipping"""
     target_kl: float = None
     """the target KL divergence threshold"""
+    num_runs_eval: int = 16
 
     # to be filled in runtime
     batch_size: int = 0
@@ -110,14 +111,14 @@ class Agent(nn.Module):
         logprob = dist.log_prob(action).sum(dim=-1)
         return action, logprob, dist.entropy().sum(dim=-1), self.critic(x)
     
-    def evaluate_model(self, step, env, logger=None):
+    def evaluate_model(self, step, env, num_runs=16, logger=None):
         self.actor.eval()
         self.critic.eval()
 
         model_percentages = []
         greedy_percentages = []
 
-        for i in range(8):
+        for i in range(num_runs):
             env.reset()
             greedy_reward, greedy_percentage = env.get_greedy_percentage()
             greedy_percentages.append(greedy_percentage)
@@ -274,16 +275,11 @@ if __name__ == "__main__":
         # print("Old returns shape: ", returns.shape, "New returns shape: ", b_returns.shape)
         # print("Old values shape: ", values.shape, "New values shape: ", b_values.shape)
 
-        b_obs = []
-        for i in range(len(obs)):
-            obs_i = {}
-            for key in obs[i].keys():
-                for j in range(len(obs[i][key])):
-                    if not j in obs_i:
-                        obs_i[j] = {}
-                    obs_i[j][key] = obs[i][key][j]
-            for j in obs_i.keys():
-                b_obs.append(obs_i[j])
+        b_obs = {}
+        for key in obs[0].keys():
+            stacked_key_data = torch.stack([torch.as_tensor(o[key], device=device) for o in obs], dim=0)
+            num_steps, num_envs = stacked_key_data.shape[0], stacked_key_data.shape[1]
+            b_obs[key] = stacked_key_data.reshape(num_steps * num_envs, *stacked_key_data.shape[2:])
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -293,7 +289,7 @@ if __name__ == "__main__":
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
-                mb_obs = [b_obs[i] for i in mb_inds]
+                mb_obs = {key: val[mb_inds] for key, val in b_obs.items()}
                 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(mb_obs, b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
@@ -360,7 +356,7 @@ if __name__ == "__main__":
             if args.track:
                 run.track(value, name=key, step=global_step)
 
-        agent.evaluate_model(global_step, generate_env(), logger=run if args.track else None)
+        agent.evaluate_model(global_step, generate_env(), num_runs=args.num_runs_eval, logger=run if args.track else None)
         print("SPS: ", metrics["charts/SPS"])
 
     envs.close()

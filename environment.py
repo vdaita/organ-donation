@@ -204,10 +204,10 @@ class PairedKidneyDonationEnv(gym.Env):
         #     reward += matched_now * 0.05
 
         unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-        reward = -unmatched_departures * 0.5
+        reward = -unmatched_departures
         matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
-        reward += matched_now * 0.1
-        
+        reward += matched_now
+
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
