@@ -139,7 +139,7 @@ class PairedKidneyModel(nn.Module):
         self.backbone.reset_parameters()
         nn.init.xavier_uniform_(self.select_fc.weight)
         if self.select_fc.bias is not None:
-            self.select_fc.bias.data.fill_(-5.0)
+            self.select_fc.bias.data.fill_(-1.0)
 
     def forward(self, obs):
         x, active_agents = self.backbone(obs)
