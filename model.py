@@ -83,7 +83,7 @@ class PairedKidneyBackbone(nn.Module):
             nn.Linear(7, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
-        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim * 2, num_layers=num_layers, out_channels=hidden_dim)
+        self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim * 2, num_layers=num_layers, out_channels=hidden_dim, norm="LayerNorm")
         self.ffprocess = nn.ModuleList([
             nn.Linear(hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
