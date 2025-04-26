@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from model import PairedKidneyCriticModel, PairedKidneyModel
 from environment import PairedKidneyDonationEnv
 import copy
+from baselines import get_greedy_percentage
 
 @dataclass
 class Args:
@@ -35,9 +36,9 @@ class Args:
     """the entity (team) of wandb's project"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 16380
+    total_timesteps: int = 163800
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
     num_envs: int = 4
     """the number of parallel game environments"""
@@ -55,11 +56,11 @@ class Args:
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
-    clip_coef: float = 0.2
+    clip_coef: float = 0.3
     """the surrogate clipping coefficient"""
     clip_vloss: bool = True
     """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
-    ent_coef: float = 0.01
+    ent_coef: float = 0.1
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
@@ -102,14 +103,51 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         probs = self.actor(x)
-        probs = Bernoulli(probs=probs)
+        dist = Bernoulli(probs=probs)
         if action is None:
-            action = probs.sample()
+            action = dist.sample()
         action = action.float()
-        print("Action shpae: ", action.shape, action.dtype)
-        logprob = probs.log_prob(action)
-        cumulative_logprob = logprob.sum(dim=-1)
-        return action, cumulative_logprob, probs.entropy(), self.critic(x)
+        logprob = dist.log_prob(action).sum(dim=-1)
+        return action, logprob, dist.entropy().sum(dim=-1), self.critic(x)
+    
+    def evaluate_model(self, step, env, logger=None):
+        self.actor.eval()
+        self.critic.eval()
+
+        model_rewards = []
+        greedy_rewards = []
+
+        for i in range(8):
+            env.reset()
+            greedy_reward = get_greedy_percentage(env)
+            greedy_rewards.append(sum(env.matched_agents) / len(env.matched_agents))
+
+            obs, info = env.start_over()
+            env.matched_agents = np.zeros_like(env.matched_agents)
+            done = False
+            total_reward = 0
+            while not done:
+                with torch.no_grad():
+                    action = self.actor(obs)
+                obs, reward, terminated, truncated, info = env.step(action.cpu().numpy())
+                done = np.logical_or(terminated, truncated)
+                total_reward += reward
+            model_rewards.append(sum(env.matched_agents) / len(env.matched_agents))
+
+        ratios = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
+        print(
+            "Model reward: ", model_rewards,
+            "\nGreedy reward: ", greedy_rewards,
+            "\nRatios: ", ratios,
+            "\nMean ratio: ", np.mean(ratios),
+            "\nStd ratio: ", np.std(ratios),
+        )
+
+        if logger is not None:
+            run.track(np.mean(ratios), name="reward_ratio", step=step)
+
+        self.actor.train()
+        self.critic.train()
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
@@ -135,9 +173,8 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
-    envs = gym.vector.SyncVectorEnv(
-        [lambda: PairedKidneyDonationEnv(
+    def generate_env():
+        return PairedKidneyDonationEnv(
             n_agents=args.n_agents,
             n_timesteps=args.n_timesteps,
             death_range=[args.death_low, args.death_high],
@@ -145,11 +182,18 @@ if __name__ == "__main__":
             p=args.p,
             q=args.q,
             pct_hard=args.pct_hard,
-        ) for _ in range(args.num_envs)],
+        )
+
+    # env setup
+    envs = gym.vector.SyncVectorEnv(
+        [lambda: generate_env() for _ in range(args.num_envs)],
     )
     # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent().to(device)
+    agent.actor.reset_parameters()
+    agent.critic.reset_parameters()
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -183,7 +227,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 # print(next_obs)
                 action, logprob, _, value = agent.get_action_and_value(next_obs)
-                print("Action: ", action.shape, "Logprob: ", logprob.shape, "Value: ", value.shape)
+                # print("Action: ", action.shape, "Logprob: ", logprob.shape, "Value: ", value.shape)
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
@@ -315,6 +359,8 @@ if __name__ == "__main__":
             writer.add_scalar(key, value, global_step)
             if args.track:
                 run.track(value, name=key, step=global_step)
+
+        agent.evaluate_model(global_step, generate_env(), logger=run if args.track else None)
         print("SPS: ", metrics["charts/SPS"])
 
     envs.close()

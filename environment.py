@@ -180,10 +180,10 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_step += 1
         done = self.current_step == self.n_timesteps
         
-        reward = (np.sum(self.matched_agents) - np.sum(previous_matched)) / self.n_agents
-        prev_hard = np.sum(previous_matched * self.is_hard_to_match)
-        curr_hard = np.sum(self.matched_agents * self.is_hard_to_match)
-        reward += ((curr_hard - prev_hard) / self.n_agents) * 3
+        if done:
+            reward = np.sum(self.matched_agents) / self.n_agents
+        else:
+            reward = 0
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):

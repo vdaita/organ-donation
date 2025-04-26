@@ -11,13 +11,22 @@ def get_feature_tensor(obs):
     if isinstance(obs, list):
         obs = {k: [d[k] for d in obs] for k in obs[0].keys()}
 
-    adj_matrix = torch.tensor(obs["adjacency_matrix"])
+    adj_matrix = torch.tensor(obs["adjacency_matrix"])        
     arrival = torch.tensor(obs["arrivals"])
     departure = torch.tensor(obs["departures"])
     is_hard_to_match = torch.tensor(obs["is_hard_to_match"])
     active_agents = torch.tensor(obs["active_agents"])
     timestep = torch.tensor(obs["timestep"])
     total_timesteps = torch.tensor(obs["total_timesteps"])
+
+    if len(adj_matrix.shape) == 2:
+        adj_matrix = adj_matrix.unsqueeze(0)
+        arrival = arrival.unsqueeze(0)
+        departure = departure.unsqueeze(0)
+        is_hard_to_match = is_hard_to_match.unsqueeze(0)
+        active_agents = active_agents.unsqueeze(0)
+        timestep = timestep.unsqueeze(0)
+        total_timesteps = total_timesteps.unsqueeze(0)
 
     B, N, _ = adj_matrix.shape
     timestep = timestep.unsqueeze(1).repeat(1, N)
@@ -44,12 +53,12 @@ def get_feature_tensor(obs):
     time_since_start = time_since_start.unsqueeze(1)
     is_hard_to_match = is_hard_to_match.unsqueeze(1)
 
-    print(
-        "time_since_arrival: ", time_since_arrival.shape,
-        "\ntime_since_start: ", time_since_start.shape,
-        "\nmultiples: ", multiples.shape,
-        "\nis_hard_to_match: ", is_hard_to_match.shape,
-    )
+    # print(
+    #     "time_since_arrival: ", time_since_arrival.shape,
+    #     "\ntime_since_start: ", time_since_start.shape,
+    #     "\nmultiples: ", multiples.shape,
+    #     "\nis_hard_to_match: ", is_hard_to_match.shape,
+    # )
 
     node_features = torch.cat([
         time_since_arrival,
@@ -87,10 +96,12 @@ class PairedKidneyBackbone(nn.Module):
         for layer in self.embedding:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
+        
         self.gat.reset_parameters()
-        nn.init.xavier_uniform_(self.select_fc.weight)
-        if self.select_fc.bias is not None:
-            nn.init.zeros_(self.select_fc.bias)
+        
+        for layer in self.ffprocess:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
 
     def forward(self, obs):
         device = self.get_device()
@@ -98,7 +109,7 @@ class PairedKidneyBackbone(nn.Module):
 
         B, N, _  = adj_matrix.shape
 
-        print("node_features: ", node_features.shape)
+        # print("node_features: ", node_features.shape)
         x = self.embedding(node_features)
         data_list = []
 
@@ -114,7 +125,7 @@ class PairedKidneyBackbone(nn.Module):
         for layer in self.ffprocess:
             x = x + F.relu(layer(x))
         x = x * active_agents.unsqueeze(-1)
-        print("Backbone output: ", x.shape)
+        # print("Backbone output: ", x.shape)
         return x
 
 class PairedKidneyModel(nn.Module):
@@ -134,8 +145,12 @@ class PairedKidneyModel(nn.Module):
         x = self.backbone(obs)
         x = self.select_fc(x)
         x = F.sigmoid(x)
-        print("After sigmoid and select_fc: ", x.shape)
+        # print("After sigmoid and select_fc: ", x.shape)
         x = x.squeeze(-1)
+
+        if x.shape[0] == 1:
+            x = x.squeeze(0)
+
         return x
     
 class PairedKidneyCriticModel(nn.Module):
@@ -151,19 +166,27 @@ class PairedKidneyCriticModel(nn.Module):
         self.value_fc = nn.Linear(hidden_dim, 1)
     
     def reset_parameters(self):
+        # Reset backbone
         self.backbone.reset_parameters()
+        
+        # Reset attention module
+        for module in self.attention.modules():
+            if hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+        
+        # Reset value head
         nn.init.xavier_uniform_(self.value_fc.weight)
         if self.value_fc.bias is not None:
             nn.init.zeros_(self.value_fc.bias)
 
     def forward(self, obs):
         x = self.backbone(obs)
-        print("After backbone: ", x.shape)
+        # print("After backbone: ", x.shape)
         x = self.attention(x)
-        print("After attention: ", x.shape)
+        # print("After attention: ", x.shape)
         x = self.value_fc(x)
-        print("After value_fc: ", x.shape)
+        # print("After value_fc: ", x.shape)
         x = torch.relu(x)
         x = x.flatten()
-        print("After flatten: ", x.shape)
+        # print("After flatten: ", x.shape)
         return x.flatten()
