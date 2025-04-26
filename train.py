@@ -114,13 +114,13 @@ class Agent(nn.Module):
         self.actor.eval()
         self.critic.eval()
 
-        model_rewards = []
-        greedy_rewards = []
+        model_percentages = []
+        greedy_percentages = []
 
         for i in range(8):
             env.reset()
-            greedy_reward = get_greedy_percentage(env)
-            greedy_rewards.append(sum(env.matched_agents) / len(env.matched_agents))
+            greedy_reward, greedy_percentage = env.get_greedy_percentage()
+            greedy_percentages.append(greedy_percentage)
 
             obs, info = env.start_over()
             env.matched_agents = np.zeros_like(env.matched_agents)
@@ -128,16 +128,16 @@ class Agent(nn.Module):
             total_reward = 0
             while not done:
                 with torch.no_grad():
-                    action, _, _, _ = self.get_action_and_value(obs)
+                    action = self.actor(obs)
                 obs, reward, terminated, truncated, info = env.step(action.cpu().numpy())
                 done = np.logical_or(terminated, truncated)
                 total_reward += reward
-            model_rewards.append(sum(env.matched_agents) / len(env.matched_agents))
+            model_percentages.append(sum(env.matched_agents) / len(env.matched_agents))
 
-        ratios = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
+        ratios = [model_pct / greedy_pct for model_pct, greedy_pct in zip(model_percentages, greedy_percentages)]
         print(
-            "Model reward: ", model_rewards,
-            "\nGreedy reward: ", greedy_rewards,
+            "Model reward: ", model_percentages,
+            "\nGreedy reward: ", greedy_percentages,
             "\nRatios: ", ratios,
             "\nMean ratio: ", np.mean(ratios),
             "\nStd ratio: ", np.std(ratios),

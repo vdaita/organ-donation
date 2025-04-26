@@ -180,27 +180,34 @@ class PairedKidneyDonationEnv(gym.Env):
 
         self.current_step += 1
         done = self.current_step == self.n_timesteps
-        
-        if done:
-            proportion_matched = np.sum(self.matched_agents) / self.n_agents
-            if is_greedy:
-                reward = 1
-            else:
-                greedy_reward, greedy_proportion = self.get_greedy_percentage()
-                ratio = proportion_matched / greedy_proportion
-                if ratio > 1.0:
-                    reward = 1.0 + np.exp(2 * (ratio - 1.0))
-                    print(f"OUTPERFORMING GREEDY! Ratio: {ratio:.4f}, Reward: {reward:.4f}")
-                elif ratio >= 0.99 and ratio <= 1.01:
-                    reward = 0.9
-                else:
-                    reward = ratio
-        else:
-            unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-            reward = -unmatched_departures * 0.1
 
-            matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
-            reward += matched_now * 0.05
+        
+        # if done:
+        #     proportion_matched = np.sum(self.matched_agents) / self.n_agents
+        #     if is_greedy:
+        #         reward = 1
+        #     else:
+        #         greedy_reward, greedy_proportion = self.get_greedy_percentage()
+        #         ratio = proportion_matched / greedy_proportion
+        #         if ratio > 1.0:
+        #             reward = 1.0 + np.exp(2 * (ratio - 1.0))
+        #             print(f"OUTPERFORMING GREEDY! Ratio: {ratio:.4f}, Reward: {reward:.4f}")
+        #         elif ratio >= 0.99 and ratio <= 1.01:
+        #             reward = 0.9
+        #         else:
+        #             reward = ratio
+        # else:
+        #     unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
+        #     reward = -unmatched_departures * 0.1
+
+        #     matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
+        #     reward += matched_now * 0.05
+
+        unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
+        reward = -unmatched_departures * 0.5
+        matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
+        reward += matched_now * 0.1
+        
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
