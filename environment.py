@@ -19,8 +19,15 @@ class PairedKidneyDonationEnv(gym.Env):
         self.n_timesteps = n_timesteps
         self.observation_space = Dict({
             "adjacency_matrix": MultiBinary((n_agents, n_agents)),
-            "timestep": Discrete(n_timesteps)
+            "timestep": Discrete(n_timesteps),
+            "arrivals": Box(low=0, high=n_timesteps, shape=(n_agents,), dtype=np.int32),
+            "departures": Box(low=0, high=float('inf'), shape=(n_agents,), dtype=np.float32),
+            "is_hard_to_match": MultiBinary(n_agents),
+            "active_agents": MultiBinary(n_agents),
+            "matched_agents": MultiBinary(n_agents),
+            "total_timesteps": Discrete(n_timesteps + 1)  # +1 because it includes n_timesteps
         })
+        self.action_space = MultiBinary(n_agents)
         self.seed = -1
         self.reset()
 
@@ -76,7 +83,7 @@ class PairedKidneyDonationEnv(gym.Env):
             print("Arrival times: ", self.arrival_times)
             print("Departure times: ", self.real_departure_times)
 
-        self.current_step = 0
+        self.current_step = 1 # fix to make sure that we have the first few elements
         self.current_graph = nx.DiGraph()
         for i in range(self.n_agents):
             self.current_graph.add_node(i)
@@ -87,13 +94,13 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def get_observation(self):
         return {
-            "adjacency_matrix": nx.adjacency_matrix(self.current_graph).toarray() if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
+            "adjacency_matrix": nx.adjacency_matrix(self.current_graph).toarray().astype(np.int8) if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
             "timestep": self.current_step,
-            "arrivals": self.arrival_times,
-            "departures": self.real_departure_times,
-            "is_hard_to_match": self.is_hard_to_match,
-            "active_agents": self.active_agents,
-            "matched_agents": self.matched_agents,
+            "arrivals": self.arrival_times.astype(np.int8),
+            "departures": self.real_departure_times.astype(np.int8),
+            "is_hard_to_match": self.is_hard_to_match.astype(np.int8),
+            "active_agents": self.active_agents.astype(np.int8),
+            "matched_agents": self.matched_agents.astype(np.int8),
             "total_timesteps": self.n_timesteps
         }
     def clear_node_edges(self, node):
@@ -112,6 +119,7 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def step(self, action):
         previous_matched = np.copy(self.matched_agents)
+        action = (action >= 0.5) # Make sure that results are 0/1 without messing up gradients or anything in the environment. 
 
         if action.sum() > 0:
             # check if the priority nodes should be matched

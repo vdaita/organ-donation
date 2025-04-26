@@ -1,386 +1,310 @@
-from environment import PairedKidneyDonationEnv
-from model import PairedKidneyModel, PairedKidneyCriticModel
-import numpy as np
-from torch.distributions.bernoulli import Bernoulli
-import torch
-import gymnasium as gym
-from tqdm import tqdm
-from baselines import get_greedy_percentage, get_periodic_percentage, get_patient_percentage
-import json
-from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
-from torch import nn
-from torch_geometric.nn import GAT, global_mean_pool
-from copy import deepcopy
-from aim import Run
-import time
+# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppopy
 import os
+import random
+import time
+from dataclasses import dataclass
 
-lr = 1e-4
-weight_decay = 1e-4
-num_layers = 3
-hidden_dim = 32
+import gymnasium as gym
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import tyro
+from torch.distributions.categorical import Categorical
+from torch.distributions.bernoulli import Bernoulli
+from torch.utils.tensorboard import SummaryWriter
+from model import PairedKidneyCriticModel, PairedKidneyModel
+from environment import PairedKidneyDonationEnv
+import copy
 
-class PPO:
-    def __init__(self, num_layers=6, hidden_dim=32, device="cpu"):
-        self.device = device
+@dataclass
+class Args:
+    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    """the name of this experiment"""
+    seed: int = 1
+    """seed of the experiment"""
+    torch_deterministic: bool = True
+    """if toggled, `torch.backends.cudnn.deterministic=False`"""
+    cuda: bool = False
+    """if toggled, cuda will be enabled by default"""
+    track: bool = False
+    """if toggled, this experiment will be tracked with Weights and Biases"""
+    wandb_project_name: str = "cleanRL"
+    """the wandb's project name"""
+    wandb_entity: str = None
+    """the entity (team) of wandb's project"""
 
-        self.actor_model = PairedKidneyModel(num_layers=num_layers, hidden_dim=hidden_dim)
-        self.critic_model = PairedKidneyCriticModel(num_layers=num_layers, hidden_dim=hidden_dim)
+    # Algorithm specific arguments
+    total_timesteps: int = 16380
+    """total timesteps of the experiments"""
+    learning_rate: float = 2.5e-4
+    """the learning rate of the optimizer"""
+    num_envs: int = 4
+    """the number of parallel game environments"""
+    num_steps: int = 128
+    """the number of steps to run in each environment per policy rollout"""
+    anneal_lr: bool = True
+    """Toggle learning rate annealing for policy and value networks"""
+    gamma: float = 0.99
+    """the discount factor gamma"""
+    gae_lambda: float = 0.95
+    """the lambda for the general advantage estimation"""
+    num_minibatches: int = 4
+    """the number of mini-batches"""
+    update_epochs: int = 4
+    """the K epochs to update the policy"""
+    norm_adv: bool = True
+    """Toggles advantages normalization"""
+    clip_coef: float = 0.2
+    """the surrogate clipping coefficient"""
+    clip_vloss: bool = True
+    """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
+    ent_coef: float = 0.01
+    """coefficient of the entropy"""
+    vf_coef: float = 0.5
+    """coefficient of the value function"""
+    max_grad_norm: float = 0.5
+    """the maximum norm for the gradient clipping"""
+    target_kl: float = None
+    """the target KL divergence threshold"""
 
+    # to be filled in runtime
+    batch_size: int = 0
+    """the batch size (computed in runtime)"""
+    minibatch_size: int = 0
+    """the mini-batch size (computed in runtime)"""
+    num_iterations: int = 0
+    """the number of iterations (computed in runtime)"""
 
-        self.actor_optimizer = torch.optim.Adam(
-            self.actor_model.parameters(),
-            lr=lr,
-            eps=1e-8,
-            weight_decay=weight_decay
-        )
+    # environment configurations
+    n_agents = 250
+    n_timesteps = 64
+    death_low = 6
+    death_high = 8
+    use_cycles = True
+    p = 0.02
+    q = 0.05
+    pct_hard = 0.7
 
-        self.critic_optimizer = torch.optim.Adam(
-            self.critic_model.parameters(),
-            lr=lr * 3, # apparently this helps the critic converge faster which should help the actor in turn
-            eps=1e-8,
-            weight_decay=weight_decay
-        )
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
-        self.actor_scheduler = ReduceLROnPlateau(
-            self.actor_optimizer,
-            mode='min',
-            factor=0.5,
-            patience=20,
-            verbose=True
-        )
-        self.critic_scheduler = ReduceLROnPlateau(
-            self.critic_optimizer,
-            mode='min',
-            factor=0.5,
-            patience=20,
-            verbose=True
-        )
+class Agent(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.critic = PairedKidneyCriticModel(hidden_dim=64)
+        self.actor = PairedKidneyModel(hidden_dim=64)
 
-        self.discount_factor = 0.995
-        self.gae_smoothing = 0.95
-        self.clip_ratio = 0.1  # PPO clipping parameter
-        self.max_grad_norm = 0.5  # For gradient clipping
+    def get_value(self, x):
+        return self.critic(x)
 
-        self.actor_model.to(self.device)
-        self.critic_model.to(self.device)
+    def get_action_and_value(self, x, action=None):
+        probs = self.actor(x)
+        print("Probs shape: ", probs.shape)
+        probs = Bernoulli(probs=probs)
+        if action is None:
+            action = probs.sample()
+        logprob = probs.log_prob(action)
+        cumulative_logprob = logprob.sum(dim=-1)
+        return action, cumulative_logprob, probs.entropy(), self.critic(x)
 
-    def sample_action(self, obs):
-        probs = self.actor_model(obs).squeeze(-1)
-        probs = torch.clamp(probs, 1e-6, 1.0 - 1e-6)
-        # Check for NaN values and replace with safe defaults
-        mask = torch.isnan(probs)
-        if mask.any():
-            probs = torch.where(mask, torch.ones_like(probs) * 1e-6, probs)
-        distribution = Bernoulli(probs=probs)
-        action = distribution.sample()
-        logprob = distribution.log_prob(action).sum()
-        return action, logprob, probs
-
-    def get_action(self, obs):
-        probs = self.actor_model(obs).squeeze(-1)
-        # Handle NaN values that might appear during inference
-        mask = torch.isnan(probs)
-        if mask.any():
-            probs = torch.where(mask, torch.zeros_like(probs), probs)
-        return (probs >= 0.5).float()
-
-    def compute_values_for_episode(self, env: PairedKidneyDonationEnv):
-        self.actor_model.train()
-        self.critic_model.train()
-
-        obs, info = env.reset()
-        done = False
-
-        observations = []
-        actions = []
-        rewards = []
-        values = []
-        logprobs = []
-        probs_list = []
-
-        with torch.no_grad():
-            while not done:
-                if obs["active_agents"].sum() == 0:
-                    action = torch.zeros((obs["active_agents"].shape[0],), device=self.device)
-                    logprob = torch.tensor(0.0, device=self.device)
-                    probs = torch.zeros((obs["active_agents"].shape[0],), device=self.device)
-                else:
-                    action, logprob, probs = self.sample_action(obs)
-
-                # Get value estimate
-                value = self.critic_model(obs) if obs["active_agents"].sum() > 0 else torch.tensor(0.0, device=self.device)
-                
-                # Store current state info                
-                observations.append(deepcopy(obs))
-                actions.append(action)
-                values.append(value)
-                logprobs.append(logprob)
-                probs_list.append(probs)
-                
-                # Take a step in the environment
-                obs, reward, done, _, info = env.step(action)
-                reward = torch.tensor(reward, device=self.device, dtype=torch.float32)
-                rewards.append(reward)
-            
-        # Stack tensors
-        actions = torch.stack(actions)
-        rewards = torch.stack(rewards)
-        values = torch.stack(values)
-        logprobs = torch.stack(logprobs)
-        
-        # Compute returns and advantages
-        returns = []
-        advantages = []
-        gae = 0
-        
-        for t in reversed(range(len(rewards))):
-            if t == len(rewards) - 1:
-                next_value = 0  # No next state at the end of episode
-            else:
-                next_value = values[t + 1].item()
-                
-            delta = rewards[t].item() + self.discount_factor * next_value - values[t].item()
-            gae = delta + self.discount_factor * self.gae_smoothing * gae
-            returns.insert(0, gae + values[t].item())
-            advantages.insert(0, gae)
-            
-        returns = torch.tensor(returns, device=self.device)
-        advantages = torch.tensor(advantages, device=self.device)
-        
-        # Normalize advantages
-        if len(advantages) > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        if len(returns) > 1:
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-
-        num_valid_observation = sum([1 for obs in observations if obs["active_agents"].sum() > 0])            
-        return observations, actions, returns, advantages, logprobs, values
-
-    def update(self, observations, actions, returns, advantages, old_logprobs, values, num_rounds=3):
-        valid_indices = [i for i, obs in enumerate(observations) if obs["active_agents"].sum() > 0]
-        
-        if not valid_indices:
-            return 0, 0  # No valid observations to update on
-        
-        observations = [observations[i] for i in valid_indices]
-        actions = actions[valid_indices]
-        returns = returns[valid_indices]
-        advantages = advantages[valid_indices]
-        old_logprobs = old_logprobs[valid_indices]
-        values = values[valid_indices]
-        
-        policy_loss_sum = 0
-        value_loss_sum = 0
-        
-        for _ in range(num_rounds):
-            # Calculate new log probabilities and value predictions
-            new_logprobs_list = []
-            new_values_list = []
-            entropies = []
-            
-            for i, obs in enumerate(observations):
-                # Get updated policy probabilities
-                probs = self.actor_model(obs).squeeze(-1)
-                probs = torch.clamp(probs, 1e-6, 1.0 - 1e-6)
-                
-                # Check for NaN values and replace with safe defaults
-                mask = torch.isnan(probs)
-                if mask.any():
-                    probs = torch.where(mask, torch.ones_like(probs) * 1e-6, probs)
-                
-                # Calculate log probabilities for the actions we took
-                distribution = Bernoulli(probs=probs)
-                new_logprob = distribution.log_prob(actions[i]).sum()
-                entropy = distribution.entropy().mean()
-                entropies.append(entropy)
-                new_logprobs_list.append(new_logprob)
-                
-                # Get updated value estimate
-                new_value = self.critic_model(obs)
-                new_values_list.append(new_value)
-            
-            # Stack results
-            new_logprobs = torch.stack(new_logprobs_list)
-            new_values = torch.stack(new_values_list)
-            
-            # Calculate ratios for PPO clipping
-            ratios = torch.exp(new_logprobs - old_logprobs)
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages
-
-            kl_div_penalty_coeff = 0.01
-            kl_div = (old_logprobs - new_logprobs).mean()
-            kl_div_penalty = kl_div_penalty_coeff * kl_div
-            run.track(kl_div_penalty.item(), name="kl_div_penalty", step=episode)
-
-            entropy_reward = torch.mean(torch.stack(entropies))
-            entropy_weight = 0.03
-            
-            # Calculate policy loss (negative for gradient ascent)
-            policy_loss = -torch.min(surr1, surr2).mean() - entropy_weight * entropy_reward + kl_div_penalty
-            
-            # Calculate value function loss
-            value_loss = 0.5 * ((new_values.squeeze() - returns) ** 2).mean()
-
-            # Perform backpropagation and optimization
-            self.actor_optimizer.zero_grad()
-            policy_loss.backward()
-
-            # Add gradient clipping to prevent exploding gradients
-            torch.nn.utils.clip_grad_norm_(
-                self.actor_model.parameters(),
-                self.max_grad_norm
-            )
-            self.actor_optimizer.step()
-            self.actor_scheduler.step(policy_loss)
-
-            
-            self.critic_optimizer.zero_grad()
-            value_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                self.critic_model.parameters(),
-                self.max_grad_norm
-            )
-
-            self.critic_optimizer.step()
-            self.critic_scheduler.step(value_loss)
-            
-            # Track losses
-            policy_loss_sum += policy_loss.item()
-            value_loss_sum += value_loss.item()
-        
-        # Return average losses
-        return policy_loss_sum / num_rounds, value_loss_sum / num_rounds
-
-# training constants
-episodes_per_env = 1024
-eval_every = 24
-batch_size = 4
-num_eval_runs = 10
-use_cycles = True
-    
-agent = PPO(
-    device="cpu", # faster on CPU - probably because less data transferring back and forth w environment
-    num_layers=num_layers,
-    hidden_dim=hidden_dim
-)
-
-envs = [
-    PairedKidneyDonationEnv(
-        n_agents=250,
-        n_timesteps=64,
-        death_range=[4, 8],
-        use_cycles=use_cycles,
-        p=0.02,
-        q=0.05,
-        pct_hard=0.7
+if __name__ == "__main__":
+    args = tyro.cli(Args)
+    args.batch_size = int(args.num_envs * args.num_steps)
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    args.num_iterations = args.total_timesteps // args.batch_size
+    run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
+    if args.track:
+        from aim import Run
+        run = Run()
+        run["hparams"] = vars(args)
+    writer = SummaryWriter(f"runs/{run_name}")
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
-]
 
-run = Run()
-run["hparams"] = {
-    "learning_rate": lr,
-    "env_agents": envs[0].n_agents,
-    "env_timesteps": envs[0].n_timesteps,
-    "env_death_range": envs[0].death_range,
-    "episodes_per_env": episodes_per_env,
-    "batch_size": batch_size,
-    "num_layers": num_layers,
-    "hidden_dim": hidden_dim,
-    "use_cycles": use_cycles,
-    "q_hard": envs[0].q,
-    "p_easy": envs[0].p
-}
+    # TRY NOT TO MODIFY: seeding
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = args.torch_deterministic
 
-def eval_model(env, agent, num_runs):
-    agent.actor_model.eval()
-    agent.critic_model.eval()
-    
-    eval_model_rewards = []
-    eval_greedy_rewards = []
-    eval_patient_rewards = []
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    waiting_times = []
+    # env setup
+    envs = gym.vector.SyncVectorEnv(
+        [lambda: PairedKidneyDonationEnv(
+            n_agents=args.n_agents,
+            n_timesteps=args.n_timesteps,
+            death_range=[args.death_low, args.death_high],
+            use_cycles=args.use_cycles,
+            p=args.p,
+            q=args.q,
+            pct_hard=args.pct_hard,
+        ) for _ in range(args.num_envs)],
+    )
+    # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    for i in tqdm(range(num_runs)):
-        run_waiting_times = {}
+    agent = Agent().to(device)
+    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-        obs, info = env.reset(options={"should_log": False})
-        done = False
-        reward = 0  # Initialize reward
-        while not done:
-            # Get binary actions from the model
-            if env.current_step == env.n_timesteps - 1:
-                action = torch.ones((env.n_agents,), device=obs["adjacency_matrix"].device)
-            else:
-                action = agent.get_action(obs)
-            obs, new_reward, done, _, info = env.step(action)
-            reward += new_reward # accumulate reward
+    # ALGO Logic: Storage setup
+    obs = [None] * args.num_steps
+    # obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-        eval_model_rewards.append(reward)
-        run_waiting_times["model"] = env.get_waiting_time_stats()
-        eval_greedy_rewards.append(get_greedy_percentage(env))
-        run_waiting_times["greedy"] = env.get_waiting_time_stats()
-        eval_patient_rewards.append(get_patient_percentage(env))
-        run_waiting_times["patient"] = env.get_waiting_time_stats()
+    # TRY NOT TO MODIFY: start the game
+    global_step = 0
+    start_time = time.time()
+    next_obs, _ = envs.reset(seed=args.seed)
+    next_done = torch.zeros(args.num_envs).to(device)
 
-        if i == num_runs - 1:
-            print("-> Environment info:")
-            env.print_info(env.get_info())
-            print("-> Model waiting time stats:")
-            env.print_waiting_time_stats(run_waiting_times["model"])
-            print("-> Greedy waiting time stats:")
-            env.print_waiting_time_stats(run_waiting_times["greedy"])
-            print("-> Patient waiting time stats:")
-            env.print_waiting_time_stats(run_waiting_times["patient"])
+    for iteration in range(1, args.num_iterations + 1):
+        # Annealing the rate if instructed to do so.
+        if args.anneal_lr:
+            frac = 1.0 - (iteration - 1.0) / args.num_iterations
+            lrnow = frac * args.learning_rate
+            optimizer.param_groups[0]["lr"] = lrnow
 
-        waiting_times.append(run_waiting_times)
+        for step in range(0, args.num_steps):
+            global_step += args.num_envs
+            obs[step] = next_obs
+            dones[step] = next_done
 
-    return {
-        "model": eval_model_rewards,
-        "greedy": eval_greedy_rewards,
-        "patient": eval_patient_rewards,
-        "waiting_times": waiting_times
-    }
+            # ALGO LOGIC: action logic
+            with torch.no_grad():
+                # print(next_obs)
+                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                print("Action: ", action.shape, "Logprob: ", logprob.shape, "Value: ", value.shape)
+                values[step] = value.flatten()
+            actions[step] = action
+            logprobs[step] = logprob
 
-timestamp = time.time()
-os.makedirs(f"results/{timestamp}", exist_ok=True)
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            next_done = np.logical_or(terminations, truncations)
+            rewards[step] = torch.tensor(reward).to(device).view(-1)
+            next_obs, next_done = next_obs, torch.Tensor(next_done).to(device)
 
-for env in envs:
-    for episode in tqdm(range(episodes_per_env)):
-        observations, actions, returns, advantages, logprobs, values = agent.compute_values_for_episode(env)
-        policy_loss, value_loss = agent.update(observations, actions, returns, advantages, logprobs, values)
-        run.track(policy_loss, name="policy_loss", step=episode)
-        run.track(value_loss, name="value_loss", step=episode)
+            if "final_info" in infos:
+                for info in infos["final_info"]:
+                    if info and "episode" in info:
+                        print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
-        if (episode + 1) % eval_every == 0:
-            evaluations = eval_model(env, agent, num_runs=num_eval_runs)
-            mean_eval_greedy_reward = np.mean(evaluations["greedy"])
-            mean_eval_patient_reward = np.mean(evaluations["patient"])
-            mean_eval_model_reward = np.mean(evaluations["model"])
+        # bootstrap value if not done
+        with torch.no_grad():
+            next_value = agent.get_value(next_obs).reshape(1, -1)
+            advantages = torch.zeros_like(rewards).to(device)
+            lastgaelam = 0
+            for t in reversed(range(args.num_steps)):
+                if t == args.num_steps - 1:
+                    nextnonterminal = 1.0 - next_done
+                    nextvalues = next_value
+                else:
+                    nextnonterminal = 1.0 - dones[t + 1]
+                    nextvalues = values[t + 1]
+                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+            returns = advantages + values
 
-            print(f"Evaluation {episode + 1}: "
-                f"avg reward = {mean_eval_model_reward:.2f}, "
-                f"greedy = {mean_eval_greedy_reward:.2f}, "
-                f"patient = {mean_eval_patient_reward:.2f}")
-            
-            model_greedy_ratio = mean_eval_model_reward / mean_eval_greedy_reward
-            model_patient_ratio = mean_eval_model_reward / mean_eval_patient_reward
+        # flatten the batch
+        b_logprobs = logprobs.reshape(-1)
+        print("Old logprobs shape: ", logprobs.shape, "New logprobs shape: ", b_logprobs.shape)
+        b_obs = []
+        for i in range(len(obs)):
+            keys = list(obs[i].keys())
+            for j in range(len(obs[i][keys[0]])):
+                b_obs.append({key: obs[i][key][j] for key in keys})
+        print("Old obs shape: ", len(obs), "New obs shape: ", len(b_obs))
+        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_advantages = advantages.reshape(-1)
+        b_returns = returns.reshape(-1)
+        b_values = values.reshape(-1)
 
-            run.track(model_greedy_ratio, name="model_greedy_ratio", step=episode)
-            run.track(model_patient_ratio, name="model_patient_ratio", step=episode)
+        # Optimizing the policy and value network
+        b_inds = np.arange(args.batch_size)
+        clipfracs = []
+        for epoch in range(args.update_epochs):
+            np.random.shuffle(b_inds)
+            for start in range(0, args.batch_size, args.minibatch_size):
+                end = start + args.minibatch_size
+                mb_inds = b_inds[start:end]
+                mb_obs = [b_obs[i] for i in mb_inds]
+                
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(mb_obs, b_actions.long()[mb_inds])
+                logratio = newlogprob - b_logprobs[mb_inds]
+                ratio = logratio.exp()
 
-        
-    with open(f"results/{timestamp}/model_results.json", "w+") as f: # the values we are writing here should be from the last round
-        f.write(json.dumps({
-            "greedy": evaluations["greedy"],
-            "patient": evaluations["patient"],
-            "model": evaluations["model"]
-        }))
+                with torch.no_grad():
+                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                    old_approx_kl = (-logratio).mean()
+                    approx_kl = ((ratio - 1) - logratio).mean()
+                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
 
+                mb_advantages = b_advantages[mb_inds]
+                if args.norm_adv:
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-    env.close()
+                # Policy loss
+                pg_loss1 = -mb_advantages * ratio
+                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
-torch.save(agent.actor_model.state_dict(), f"results/{timestamp}/actor_model.pth")
-torch.save(agent.critic_model.state_dict(), f"results/{timestamp}/critic_model.pth")
+                # Value loss
+                newvalue = newvalue.view(-1)
+                if args.clip_vloss:
+                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                    v_clipped = b_values[mb_inds] + torch.clamp(
+                        newvalue - b_values[mb_inds],
+                        -args.clip_coef,
+                        args.clip_coef,
+                    )
+                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                    v_loss = 0.5 * v_loss_max.mean()
+                else:
+                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+
+                entropy_loss = entropy.mean()
+                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                optimizer.step()
+
+            if args.target_kl is not None and approx_kl > args.target_kl:
+                break
+
+        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+        var_y = np.var(y_true)
+        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+        metrics = {
+            "charts/learning_rate": optimizer.param_groups[0]["lr"],
+            "losses/value_loss": v_loss.item(),
+            "losses/policy_loss": pg_loss.item(),
+            "losses/entropy": entropy_loss.item(),
+            "losses/old_approx_kl": old_approx_kl.item(),
+            "losses/approx_kl": approx_kl.item(),
+            "losses/clipfrac": np.mean(clipfracs),
+            "losses/explained_variance": explained_var,
+            "charts/SPS": int(global_step / (time.time() - start_time))
+        }
+        for key, value in metrics.items():
+            writer.add_scalar(key, value, global_step)
+            if args.track:
+                run.track(value, name=key, step=global_step)
+        print("SPS: ", metrics["charts/SPS"])
+
+    envs.close()
+    writer.close()

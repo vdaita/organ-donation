@@ -1,8 +1,53 @@
-from torch_geometric.nn import GAT, GATv2Conv, global_mean_pool
+from torch_geometric.nn import GAT, GATv2Conv, global_mean_pool, GlobalAttention
 from torch import nn
 import torch
 import torch.nn.functional as F
 import numpy as np
+from torch_geometric.data import Batch, Data
+from torch_scatter import scatter_mean
+
+def get_feature_tensor(obs):
+    adj_matrix = torch.tensor(obs["adjacency_matrix"])
+    arrival = torch.tensor(obs["arrivals"])
+    departure = torch.tensor(obs["departures"])
+    is_hard_to_match = torch.tensor(obs["is_hard_to_match"])
+    active_agents = torch.tensor(obs["active_agents"])
+    timestep = torch.tensor(obs["timestep"])
+    total_timesteps = torch.tensor(obs["total_timesteps"])
+
+    B, N, _ = adj_matrix.shape
+    timestep = timestep.unsqueeze(1).repeat(1, N)
+    total_timesteps = total_timesteps.unsqueeze(1).repeat(1, N)
+
+    time_since_arrival = (timestep - arrival) / (departure - arrival)
+    time_since_start = timestep / total_timesteps
+
+    multiples = []
+    for k in [2, 4, 7]:
+        multiples.append(time_since_start % k)
+    multiples = torch.stack(multiples, dim=1)
+
+    time_since_arrival = time_since_arrival.unsqueeze(1)
+    time_since_start = time_since_start.unsqueeze(1)
+    is_hard_to_match = is_hard_to_match.unsqueeze(1)
+
+    print(
+        "time_since_arrival: ", time_since_arrival.shape,
+        "\ntime_since_start: ", time_since_start.shape,
+        "\nmultiples: ", multiples.shape,
+        "\nis_hard_to_match: ", is_hard_to_match.shape,
+    )
+
+    node_features = torch.cat([
+        time_since_arrival,
+        time_since_start,
+        multiples,
+        is_hard_to_match,
+    ], dim=1)
+
+    node_features = node_features.transpose(-1, -2)
+
+    return node_features, adj_matrix, active_agents
 
 class PairedKidneyBackbone(nn.Module):
     def __init__(self, hidden_dim, num_layers=3):
@@ -10,9 +55,9 @@ class PairedKidneyBackbone(nn.Module):
         
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-
+ 
         self.embedding = nn.Sequential(
-            nn.Linear(26, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
+            nn.Linear(6, hidden_dim), # timestamp from distance of arrival to departure achieved, hard to match
             nn.Linear(hidden_dim, hidden_dim)
         )
         self.gat = GAT(in_channels=hidden_dim, hidden_channels=hidden_dim * 2, num_layers=num_layers, out_channels=hidden_dim)
@@ -35,72 +80,27 @@ class PairedKidneyBackbone(nn.Module):
 
     def forward(self, obs):
         device = self.get_device()
+        node_features, adj_matrix, active_agents = get_feature_tensor(obs)
 
-        adj_matrix = torch.Tensor(obs["adjacency_matrix"]).to(device)
-        timestep = obs["timestep"]
-        arrival = torch.Tensor(obs["arrivals"]).to(device)
-        departure = torch.Tensor(obs["departures"]).to(device)
-        is_hard_to_match = torch.Tensor(obs["is_hard_to_match"]).to(device)
-        active_agents = torch.Tensor(obs["active_agents"]).to(device)
+        B, N, _  = adj_matrix.shape
 
+        print("node_features: ", node_features.shape)
+        x = self.embedding(node_features)
+        data_list = []
 
-        if torch.sum(active_agents) == 0:
-            return torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
-        
-        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze(1)
-        
-        if masked_indices.dim() == 0:
-            masked_indices = masked_indices.unsqueeze(0)
-            
-        num_active = masked_indices.size(0)            
-        relevant_arrivals = arrival[masked_indices]
-        relevant_departures = departure[masked_indices]
-        timestep_expanded = torch.full((num_active, ), timestep, device=adj_matrix.device)
-        adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
+        for b in range(B):
+            edges = adj_matrix[b].nonzero(as_tuple=False).t()
+            data = Data(x=x[b], edge_index=edges)
+            data_list.append(data)
 
-        # Add epsilon to avoid division by zero
-        time_diff = relevant_departures - relevant_arrivals
-        time_diff = torch.clamp(time_diff, min=1.0)  # Avoid division by zero
-        relevant_progress = (timestep_expanded - relevant_arrivals) / time_diff
-
-        time_until_departure = relevant_departures - timestep_expanded
-        about_to_leave = (time_until_departure <= 1).float()
-
-        # Create time indicators for progress
-        num_bins = 20 
-        bin_size = 1.0 / num_bins
-        time_indicators = torch.zeros((num_active, num_bins), device=device)
-        for i, progress in enumerate(relevant_progress):
-            bin_idx = min(int(progress / bin_size), num_bins - 1)
-            time_indicators[i, bin_idx] = 1.0
-
-        degree_features = torch.sum(adj_matrix_revised, dim=1, keepdim=True)  # In-degree
-        out_degree = torch.sum(adj_matrix_revised, dim=0).unsqueeze(1)  # Out-degree
-        hard_neighbors = torch.mm(adj_matrix_revised, is_hard_to_match[masked_indices].unsqueeze(1))
-        
-        in_data = torch.concat([
-            relevant_progress.unsqueeze(1), 
-            is_hard_to_match[masked_indices].unsqueeze(1),
-            about_to_leave.unsqueeze(1),
-            time_indicators,
-            degree_features,
-            out_degree,
-            hard_neighbors
-        ], dim=1)
-
-        x = self.embedding(in_data)
-        
-        adj_matrix_revised = adj_matrix[np.ix_(masked_indices, masked_indices)]
-        edge_index = adj_matrix_revised.nonzero(as_tuple=False).t()
-        
-        # Only perform GAT if there are edges in the graph
-        if edge_index.shape[1] > 0:
-            x = x + self.gat(x, edge_index) # adding residual
-
-        x = F.layer_norm(x, x.size()[1:]) 
+        batch_data = Batch.from_data_list(data_list).to(device)
+        x_gat = self.gat(batch_data.x, batch_data.edge_index)
+        x_gat = x_gat.reshape(B, N, -1)
+        x = x + x_gat
         for layer in self.ffprocess:
             x = x + F.relu(layer(x))
-
+        x = x * active_agents.unsqueeze(-1)
+        print("Backbone output: ", x.shape)
         return x
 
 class PairedKidneyModel(nn.Module):
@@ -117,25 +117,23 @@ class PairedKidneyModel(nn.Module):
             nn.init.zeros_(self.select_fc.bias)
 
     def forward(self, obs):
-        adj_matrix = torch.Tensor(obs["adjacency_matrix"]).to(self.backbone.get_device())
-        active_agents = torch.Tensor(obs["active_agents"]).to(self.backbone.get_device())
-        if torch.sum(active_agents) == 0:
-            return torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
-        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze(1)
-        
         x = self.backbone(obs)
         x = self.select_fc(x)
         x = F.sigmoid(x)
-
-        ret_nodes = torch.zeros((adj_matrix.size(0), 1), device=adj_matrix.device)
-        ret_nodes[masked_indices] = x
-        return ret_nodes
-
+        print("After sigmoid and select_fc: ", x.shape)
+        x = x.squeeze(-1)
+        return x
+    
 class PairedKidneyCriticModel(nn.Module):
     def __init__(self, hidden_dim, num_layers=3):
         super(PairedKidneyCriticModel, self).__init__()
 
         self.backbone = PairedKidneyBackbone(hidden_dim, num_layers)
+        self.attention = GlobalAttention(nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        ))
         self.value_fc = nn.Linear(hidden_dim, 1)
     
     def reset_parameters(self):
@@ -145,23 +143,13 @@ class PairedKidneyCriticModel(nn.Module):
             nn.init.zeros_(self.value_fc.bias)
 
     def forward(self, obs):
-        adj_matrix = torch.Tensor(obs["adjacency_matrix"]).to(self.backbone.get_device())
-        relevant_arrivals = torch.Tensor(obs["arrivals"]).to(self.backbone.get_device())
-        active_agents = torch.Tensor(obs["active_agents"]).to(self.backbone.get_device())
-
-        if torch.sum(active_agents) == 0:
-            return 0
-        
-        masked_indices = torch.nonzero(active_agents, as_tuple=False).squeeze(1)
-        
-        if masked_indices.dim() == 0:
-            masked_indices = masked_indices.unsqueeze(0)
-        
-        relevant_arrivals = relevant_arrivals[masked_indices]
-            
         x = self.backbone(obs)
-        batch = torch.zeros_like(relevant_arrivals, dtype=torch.long, device=adj_matrix.device)
-        x = global_mean_pool(x, batch=batch)
-        
+        print("After backbone: ", x.shape)
+        x = self.attention(x)
+        print("After attention: ", x.shape)
         x = self.value_fc(x)
-        return x.squeeze()
+        print("After value_fc: ", x.shape)
+        x = torch.relu(x)
+        x = x.flatten()
+        print("After flatten: ", x.shape)
+        return x.flatten()
