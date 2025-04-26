@@ -7,6 +7,10 @@ from torch_geometric.data import Batch, Data
 from torch_scatter import scatter_mean
 
 def get_feature_tensor(obs):
+    # there are two ways to represent this: a list of dictionaries that have the same keys, or a dictionary of lists. code simplifies when both are comaptible
+    if isinstance(obs, list):
+        obs = {k: [d[k] for d in obs] for k in obs[0].keys()}
+
     adj_matrix = torch.tensor(obs["adjacency_matrix"])
     arrival = torch.tensor(obs["arrivals"])
     departure = torch.tensor(obs["departures"])

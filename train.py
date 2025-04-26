@@ -106,6 +106,8 @@ class Agent(nn.Module):
         probs = Bernoulli(probs=probs)
         if action is None:
             action = probs.sample()
+        action = action.float()
+        print("Action shpae: ", action.shape, action.dtype)
         logprob = probs.log_prob(action)
         cumulative_logprob = logprob.sum(dim=-1)
         return action, cumulative_logprob, probs.entropy(), self.critic(x)
@@ -219,16 +221,26 @@ if __name__ == "__main__":
         # flatten the batch
         b_logprobs = logprobs.reshape(-1)
         print("Old logprobs shape: ", logprobs.shape, "New logprobs shape: ", b_logprobs.shape)
-        b_obs = []
-        for i in range(len(obs)):
-            keys = list(obs[i].keys())
-            for j in range(len(obs[i][keys[0]])):
-                b_obs.append({key: obs[i][key][j] for key in keys})
-        print("Old obs shape: ", len(obs), "New obs shape: ", len(b_obs))
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
+
+        print("Old actions shape: ", actions.shape, "New actions shape: ", b_actions.shape)
+        print("Old advantages shape: ", advantages.shape, "New advantages shape: ", b_advantages.shape)
+        print("Old returns shape: ", returns.shape, "New returns shape: ", b_returns.shape)
+        print("Old values shape: ", values.shape, "New values shape: ", b_values.shape)
+
+        b_obs = []
+        for i in range(len(obs)):
+            obs_i = {}
+            for key in obs[i].keys():
+                for j in range(len(obs[i][key])):
+                    if not j in obs_i:
+                        obs_i[j] = {}
+                    obs_i[j][key] = obs[i][key][j]
+            for j in obs_i.keys():
+                b_obs.append(obs_i[j])
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
