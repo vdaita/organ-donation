@@ -188,10 +188,15 @@ class PairedKidneyDonationEnv(gym.Env):
             else:
                 greedy_reward, greedy_proportion = self.get_greedy_percentage()
                 ratio = proportion_matched / greedy_proportion
-                reward = (ratio * 2) ** 2
+                reward = ratio ** 2
+                if ratio > 1:
+                    print("Example in training set with better performance than greedy ", ratio, " Reward: ", reward)
         else:
             unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-            reward = -unmatched_departures * 0.25
+            reward = -unmatched_departures * 0.1
+
+            matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
+            reward += matched_now * 0.05
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
