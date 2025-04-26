@@ -13,7 +13,7 @@ def get_greedy_percentage(env: PairedKidneyDonationEnv): # easier to test with P
     obs, info = env.start_over()
     reward, done = 0, False
     while not done:
-        action = np.ones(env.n_agents)
+        action = env.active_agents
         observation, new_reward, done, _, info = env.step(action)
         reward += new_reward
     return reward

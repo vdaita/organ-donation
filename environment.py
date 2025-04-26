@@ -117,9 +117,10 @@ class PairedKidneyDonationEnv(gym.Env):
         self.matched_agents[u] = 1
         self.time_matched[u] = self.current_step
 
-    def step(self, action):
+    def step(self, action, is_greedy=False):
         previous_matched = np.copy(self.matched_agents)
         action = (action >= 0.5) # Make sure that results are 0/1 without messing up gradients or anything in the environment. 
+        action = action * self.active_agents # only consider active agents
 
         if action.sum() > 0:
             # check if the priority nodes should be matched
@@ -181,9 +182,16 @@ class PairedKidneyDonationEnv(gym.Env):
         done = self.current_step == self.n_timesteps
         
         if done:
-            reward = np.sum(self.matched_agents) / self.n_agents
+            proportion_matched = np.sum(self.matched_agents) / self.n_agents
+            if is_greedy:
+                reward = 1
+            else:
+                greedy_reward, greedy_proportion = self.get_greedy_percentage()
+                ratio = proportion_matched / greedy_proportion
+                reward = (ratio * 2) ** 2
         else:
-            reward = 0
+            unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
+            reward = -unmatched_departures * 0.25
         return self.get_observation(), reward, done, done, self.get_info()
     
     def get_info(self):
@@ -271,3 +279,12 @@ class PairedKidneyDonationEnv(gym.Env):
             print(f"  Average Waiting Time: {stat['avg_waiting_time']:.2f}")
             print(f"  Standard Deviation of Waiting Time: {stat['std_waiting_time']:.2f}")
             print(f"  Percentage Matched: {stat['pct_matched'] * 100:.2f}%")
+
+    def get_greedy_percentage(self):
+        obs, info = self.start_over()
+        reward, done = 0, False
+        while not done:
+            action = self.active_agents
+            obs, new_reward, done, _, info = self.step(action, is_greedy=True)
+            reward += new_reward
+        return reward, (sum(self.matched_agents) / self.n_agents)

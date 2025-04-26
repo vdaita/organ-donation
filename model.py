@@ -126,7 +126,7 @@ class PairedKidneyBackbone(nn.Module):
             x = x + F.relu(layer(x))
         x = x * active_agents.unsqueeze(-1)
         # print("Backbone output: ", x.shape)
-        return x
+        return x, active_agents
 
 class PairedKidneyModel(nn.Module):
     def __init__(self, hidden_dim, num_layers=3):
@@ -142,10 +142,11 @@ class PairedKidneyModel(nn.Module):
             nn.init.zeros_(self.select_fc.bias)
 
     def forward(self, obs):
-        x = self.backbone(obs)
+        x, active_agents = self.backbone(obs)
         x = self.select_fc(x)
         x = F.sigmoid(x)
         # print("After sigmoid and select_fc: ", x.shape)
+        # x = x * active_agents.unsqueeze(-1)
         x = x.squeeze(-1)
 
         if x.shape[0] == 1:
@@ -180,7 +181,7 @@ class PairedKidneyCriticModel(nn.Module):
             nn.init.zeros_(self.value_fc.bias)
 
     def forward(self, obs):
-        x = self.backbone(obs)
+        x, active_agents = self.backbone(obs)
         # print("After backbone: ", x.shape)
         x = self.attention(x)
         # print("After attention: ", x.shape)
@@ -189,4 +190,4 @@ class PairedKidneyCriticModel(nn.Module):
         x = torch.relu(x)
         x = x.flatten()
         # print("After flatten: ", x.shape)
-        return x.flatten()
+        return x
