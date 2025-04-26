@@ -88,7 +88,6 @@ class PairedKidneyBackbone(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
         ])
-        self.gat_impact = nn.Parameter(torch.tensor(0.5), requires_grad=True)
     
     def get_device(self):
         return next(self.parameters()).device
@@ -122,7 +121,7 @@ class PairedKidneyBackbone(nn.Module):
         batch_data = Batch.from_data_list(data_list).to(device)
         x_gat = self.gat(batch_data.x, batch_data.edge_index)
         x_gat = x_gat.reshape(B, N, -1)
-        x = x + self.gat_impact * x_gat
+        x = x + 0.25 * x_gat
         for layer in self.ffprocess:
             x = x + F.relu(layer(x))
         x = x * active_agents.unsqueeze(-1)
