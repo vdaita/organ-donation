@@ -128,7 +128,7 @@ class Agent(nn.Module):
             total_reward = 0
             while not done:
                 with torch.no_grad():
-                    action = self.actor(obs)
+                    action, _, _, _ = self.get_action_and_value(obs)
                 obs, reward, terminated, truncated, info = env.step(action.cpu().numpy())
                 done = np.logical_or(terminated, truncated)
                 total_reward += reward
@@ -263,16 +263,16 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_logprobs = logprobs.reshape(-1)
-        print("Old logprobs shape: ", logprobs.shape, "New logprobs shape: ", b_logprobs.shape)
+        # print("Old logprobs shape: ", logprobs.shape, "New logprobs shape: ", b_logprobs.shape)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
 
-        print("Old actions shape: ", actions.shape, "New actions shape: ", b_actions.shape)
-        print("Old advantages shape: ", advantages.shape, "New advantages shape: ", b_advantages.shape)
-        print("Old returns shape: ", returns.shape, "New returns shape: ", b_returns.shape)
-        print("Old values shape: ", values.shape, "New values shape: ", b_values.shape)
+        # print("Old actions shape: ", actions.shape, "New actions shape: ", b_actions.shape)
+        # print("Old advantages shape: ", advantages.shape, "New advantages shape: ", b_advantages.shape)
+        # print("Old returns shape: ", returns.shape, "New returns shape: ", b_returns.shape)
+        # print("Old values shape: ", values.shape, "New values shape: ", b_values.shape)
 
         b_obs = []
         for i in range(len(obs)):
