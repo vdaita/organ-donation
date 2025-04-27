@@ -1,14 +1,23 @@
-from stable_baselines3.common.vec_env import DummyVecEnv
-# from sb3_contrib import RecurrentPPO
-from stable_baselines3 import A2C
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from sb3_contrib import RecurrentPPO
+from stable_baselines3 import PPO
 import matplotlib.pyplot as plt
 import numpy as np
 from binary_decision_environment import BinaryDecisionEnvironment
   
+def make_env(rank):
+    def _init():
+        env = BinaryDecisionEnvironment(n_agents=100, n_timesteps=32)
+        env.reset(seed=rank)
+        return env
+    return _init
+
 if __name__  == "__main__":
     # model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
-    model = A2C("MlpPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
-    model.learn(total_timesteps=20000)
+    n_envs = 16
+    env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
+    model = PPO("MlpPolicy", env, verbose=1, gamma=0.995, tensorboard_log="./tb_runs/")
+    model.learn(total_timesteps=100000)
 
     num_runs = 16
     model_rewards = []
