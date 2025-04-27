@@ -85,11 +85,11 @@ class BinaryDecisionEnvironment(gym.Env):
         self.compat[np.ix_(hard_idxs, hard_idxs)] = 0 
         self.compat[np.arange(self.n_agents), np.arange(self.n_agents)] = 0
 
-
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
         
         self.vetoed_cycles = np.zeros((self.n_agents, self.n_agents))
+        self.step_reward = 0
 
         return self._get_obs(), {}
 
@@ -126,11 +126,13 @@ class BinaryDecisionEnvironment(gym.Env):
         self.active_agents[node] = 0
 
     def step(self, action):
+        self.step_reward = 0
         if action:
             for i in self._get_edge():
                 self.matched_agents[i] = 1
                 self.active_agents[i] = 0
                 self.graph.remove_node(i)
+            self.step_reward += 2 / self.n_agents
         else:
             a, b = self._get_edge()
             self.vetoed_cycles[a, b] = 1
@@ -138,22 +140,17 @@ class BinaryDecisionEnvironment(gym.Env):
 
         # find a different edge
         new_obs = self._get_obs()
-        # print("Observation: ", new_obs)
-        done = False
+        reward = self._get_reward()
+        done = self.current_timestep >= self.n_timesteps
 
-        if self.current_timestep >= self.n_timesteps:
-            done = True
-            reward = self._get_reward()
-            return new_obs, reward, done, done, {}
-        
-        return new_obs, 0, done, done, {}
+        return new_obs, self.step_reward, done, done, {}
 
     def _edge_to_feature(self, edge, current_timestep=None):
         if current_timestep is None:
             current_timestep = self.current_timestep
         a, b = edge
         features = np.zeros(15,)
-        # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b])
+        # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b]) 
         features[0] = current_timestep / self.n_timesteps
         features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
         features[2] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
@@ -180,7 +177,9 @@ class BinaryDecisionEnvironment(gym.Env):
         return features
     
     def _get_reward(self):
-        return sum(self.matched_agents) / self.n_agents
+        if self.current_timestep >= self.n_timesteps:
+            return sum(self.matched_agents) / self.n_agents
+        return 0
     
     def _get_edge(self):
         edge = self.find_edge()
@@ -199,6 +198,7 @@ class BinaryDecisionEnvironment(gym.Env):
             for i in new_departures:
                 if self.active_agents[i] == 1:
                     self.remove_node(i)
+                    self.step_reward -= 1 / self.n_agents
 
             edge = self.find_edge()
         return edge
@@ -215,7 +215,9 @@ class BinaryDecisionEnvironment(gym.Env):
         while not done:
             action = 1 
             obs, reward, done, _, _ = self.step(action)
-        return reward
+        
+        final_reward = (np.sum(self.matched_agents)) / self.n_agents
+        return final_reward
     
     def get_theoretical_max(self): # 
         tm_graph = nx.Graph()

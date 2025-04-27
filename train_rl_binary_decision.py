@@ -1,12 +1,14 @@
 from stable_baselines3.common.vec_env import DummyVecEnv
-from sb3_contrib import RecurrentPPO
+# from sb3_contrib import RecurrentPPO
+from stable_baselines3 import A2C
 import matplotlib.pyplot as plt
 import numpy as np
 from binary_decision_environment import BinaryDecisionEnvironment
   
 if __name__  == "__main__":
-    model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
-    model.learn(total_timesteps=2000)
+    # model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
+    model = A2C("MlpPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
+    model.learn(total_timesteps=20000)
 
     num_runs = 16
     model_rewards = []
@@ -17,10 +19,12 @@ if __name__  == "__main__":
 
         obs, _ = env.reset(seed=seed)
         done = False
+
         while not done:
             action, _ = model.predict(obs)
             obs, reward, done, _, _ = env.step(action > 0.5)
-        model_rewards.append(reward)
+
+        model_rewards.append(np.sum(env.matched_agents) / env.n_agents)
         greedy_reward = env.get_greedy_result()
         greedy_rewards.append(greedy_reward)
 
