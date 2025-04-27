@@ -9,28 +9,40 @@ import numpy as np
 from aim import Run
 
 model = nn.Sequential(
-    nn.Linear(10, 64),
+    nn.Linear(10, 128),
+    nn.LayerNorm(128),
     nn.ReLU(),
-    nn.Linear(64, 64),
+    nn.Dropout(0.2),
+    nn.Linear(128, 128),
+    nn.LayerNorm(128),
     nn.ReLU(),
-    nn.Linear(64, 64),
+    nn.Dropout(0.2),
+    nn.Linear(128, 128),
+    nn.LayerNorm(128),
     nn.ReLU(),
-    nn.Linear(64, 1),
+    nn.Linear(128, 1),
     nn.Sigmoid()
 )
-
 # randomly initialize the model
 model.apply(lambda m: nn.init.xavier_uniform_(m.weight) if isinstance(m, nn.Linear) else None)
 
+
 lr = 0.0001
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.5,
+    patience=5,
+    verbose=True
+)
 
 if __name__ == "__main__":
-    num_environments = 2096
+    num_environments = 2048
     batch_size = 32
     envs_per_eval = 32
     runs_per_eval = 8
-    n_agents = 250
+    n_agents = 100
 
     env = BinaryDecisionEnvironment(n_agents=n_agents)
     run = Run()
@@ -56,14 +68,15 @@ if __name__ == "__main__":
         index_reshuffle = np.random.permutation(len(matchings))
 
         num_matchings = len(matchings)
+        pos_weight = len(bad_matching) / len(best_matching)
         
         outputs = torch.zeros(num_matchings, 1)
         for batch in range(0, num_matchings, batch_size):
             batch_elements = index_reshuffle[batch:batch + batch_size]
 
-            batch_matchings = matchings[batch_elements]
+            batch_matchings = [matchings[i] for i in batch_elements]
             batch_outputs = torch.zeros(len(batch_matchings))
-            batch_target_scores = torch.tensor(scores[batch_elements], dtype=torch.float32)
+            batch_target_scores = torch.tensor([scores[i] for i in batch_elements], dtype=torch.float32)
 
             optimizer.zero_grad()
 
@@ -72,15 +85,37 @@ if __name__ == "__main__":
                 start = max(env.arrival_times[a], env.arrival_times[b])
                 end = min(env.departure_times[a], env.departure_times[b])
 
-                features = [env._edge_to_feature(matching, current_timestep=timestep) for timestep in range(start, end + 1)]
+                features_list = [env._edge_to_feature(matching, current_timestep=timestep) for timestep in range(start, end + 1)]
+                features = np.array(features_list)
                 features = torch.tensor(features, dtype=torch.float32)
 
                 outputs = model(features)
-                batch_outputs[match_idx] = torch.max(outputs)
-            
-            loss = nn.MSELoss()(batch_outputs, batch_target_scores)
+                batch_outputs[match_idx] = torch.mean(outputs)
+                # max_output = torch.max(outputs)
+
+                # if max_output > 0.5:
+                #     for output in outputs:
+                #         if output > 0.5:
+                #             batch_outputs[match_idx] = output
+                # else:
+                #     batch_outputs[match_idx] = torch.mean(outputs)
+    
+            loss_fn = nn.BCELoss(
+                weight=torch.tensor([1.0 if score == 1 else (1 / pos_weight) for score in batch_target_scores]),
+                reduction="mean"
+            )
+            loss = loss_fn(batch_outputs, batch_target_scores)
             loss.backward()
             optimizer.step()
+            scheduler.step(loss)
+
+            # Calculate weighted accuracy
+            predictions = (batch_outputs > 0.5).float()
+            correct = (predictions == batch_target_scores).float()
+            weights = batch_target_scores * pos_weight + (1 - batch_target_scores)
+            weighted_acc = torch.sum(correct * weights) / torch.sum(weights)
+
+            run.track(weighted_acc.item(), name="weighted_accuracy", step=step)
         
             step += 1
             run.track(loss.item(), name="loss", step=step)
@@ -88,18 +123,22 @@ if __name__ == "__main__":
         if environment_idx % envs_per_eval == 0:
             model_rewards = []
             greedy_rewards = []
+            theoretical_max_rewards = []
 
-            for _ in range(runs_per_eval):
-                obs, _ = env.reset(seed=environment_idx)
+            for env_idx in range(runs_per_eval):
+                obs, _ = env.reset(seed=environment_idx * env_idx)
                 done = False
                 while not done:
                     action = model(torch.tensor(obs, dtype=torch.float32))
-                    obs, reward, done, _, _ = env.step(action)
+                    obs, reward, done, _, _ = env.step(action > 0.5)
                 model_rewards.append(reward)
                 greedy_rewards.append(env.get_greedy_result())
-            
+                theoretical_max_rewards.append((len(env.get_theoretical_max()[0]) * 2) / n_agents)
+
             print("Model rewards: ", np.mean(model_rewards)) 
             print("Greedy rewards: ", np.mean(greedy_rewards))
+            print("Theoretical max rewards: ", np.mean(theoretical_max_rewards))
+            
             ratio = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
             print("Ratio: ", np.mean(ratio), " +/- ", np.std(ratio))
 

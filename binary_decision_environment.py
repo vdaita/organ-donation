@@ -9,9 +9,7 @@ import numpy as np
 import networkx as nx
 from typing import Optional
 from gymnasium.spaces import Discrete, Box, Dict, MultiBinary
-from stable_baselines3.common.vec_env import DummyVecEnv
-from sb3_contrib import RecurrentPPO
-import matplotlib.pyplot as plt
+
 
 def intersect_ranges(a, b):
     return max(a[0], b[0]) < min(a[1], b[1])
@@ -164,6 +162,7 @@ class BinaryDecisionEnvironment(gym.Env):
         features[5] = current_timestep % (int(self.n_timesteps / 16))
         features[6] = current_timestep % (int(self.n_timesteps / 8))
         features[7] = current_timestep % (int(self.n_timesteps / 4))
+        features[8] = min(self.departure_times[a] - current_timestep, self. departure_times[b] - current_timestep) / self.n_timesteps
         return features
     
     def _get_reward(self):
@@ -222,32 +221,4 @@ class BinaryDecisionEnvironment(gym.Env):
         all_edges = list(tm_graph.edges())
         return best_matching, all_edges
                     
-    
-if __name__  == "__main__":
-    model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
-    model.learn(total_timesteps=100000)
-
-    num_runs = 16
-    model_rewards = []
-    greedy_rewards = []
-    for _ in range(num_runs):
-        env = BinaryDecisionEnvironment()
-        seed = np.random.randint(0, 2 ** 32 - 1)
-
-        obs, _ = env.reset(seed=seed)
-        done = False
-        while not done:
-            action, _ = model.predict(obs)
-            obs, reward, done, _, _ = env.step(action)
-        model_rewards.append(reward)
-        greedy_reward = env.get_greedy_result()
-        greedy_rewards.append(greedy_reward)
-
-    ratio = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
-    print(f"Model rewards: {model_rewards}")
-    print(f"Greedy rewards: {greedy_rewards}")
-    print(f"Ratio: {ratio}")
-
-    plt.boxplot(ratio)
-    plt.show()
-   
+ 
