@@ -13,6 +13,9 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from sb3_contrib import RecurrentPPO
 import matplotlib.pyplot as plt
 
+def intersect_ranges(a, b):
+    return max(a[0], b[0]) < min(a[1], b[1])
+
 class BinaryDecisionEnvironment(gym.Env):
     def __init__(
         self,
@@ -147,18 +150,20 @@ class BinaryDecisionEnvironment(gym.Env):
         
         return new_obs, 0, done, done, {}
 
-    def _edge_to_feature(self, edge):
+    def _edge_to_feature(self, edge, current_timestep=None):
+        if current_timestep is None:
+            current_timestep = self.current_timestep
         a, b = edge
         features = np.zeros(10,)
         # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b])
-        features[0] = self.current_timestep / self.n_timesteps
-        features[1] = (self.departure_times[a] - self.current_timestep) / (self.departure_times[a] - self.arrival_times[a])
-        features[2] = (self.departure_times[b] - self.current_timestep) / (self.departure_times[b] - self.arrival_times[b])
+        features[0] = current_timestep / self.n_timesteps
+        features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
+        features[2] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
         features[3] = self.is_hard[a]
         features[4] = self.is_hard[b]
-        features[5] = self.current_timestep % (int(self.n_timesteps / 16))
-        features[6] = self.current_timestep % (int(self.n_timesteps / 8))
-        features[7] = self.current_timestep % (int(self.n_timesteps / 4))
+        features[5] = current_timestep % (int(self.n_timesteps / 16))
+        features[6] = current_timestep % (int(self.n_timesteps / 8))
+        features[7] = current_timestep % (int(self.n_timesteps / 4))
         return features
     
     def _get_reward(self):
@@ -167,7 +172,9 @@ class BinaryDecisionEnvironment(gym.Env):
     def _get_edge(self):
         edge = self.find_edge()
         while not edge:
-            self.current_timestep += 1
+            self.current_timestep += 1 # there is no edge in the current timestep
+            self.vetoed_cycles = np.zeros((self.n_agents, self.n_agents)) # reset the vetoed cycles - should be able to choose at this new timestep, with new circumstances
+
             if self.current_timestep > self.n_timesteps:
                 return [0, 0]
             # add arrivals
@@ -179,6 +186,7 @@ class BinaryDecisionEnvironment(gym.Env):
             for i in new_departures:
                 if self.active_agents[i] == 1:
                     self.remove_node(i)
+
             edge = self.find_edge()
         return edge
     
@@ -196,9 +204,28 @@ class BinaryDecisionEnvironment(gym.Env):
             obs, reward, done, _, _ = self.step(action)
         return reward
     
+    def get_theoretical_max(self): # 
+        tm_graph = nx.Graph()
+        for i in range(self.n_agents):
+            for j in range(self.n_agents):
+                if i == j:
+                    continue
+                
+                if self.compat[i, j] == 1:
+                    i_times = [self.arrival_times[i], self.departure_times[i]]
+                    j_times = [self.arrival_times[j], self.departure_times[j]]
+                    if intersect_ranges(i_times, j_times):
+                        tm_graph.add_edge(i, j)
+
+        best_matching = nx.max_weight_matching(tm_graph, maxcardinality=True)
+        best_matching = list(best_matching)
+        all_edges = list(tm_graph.edges())
+        return best_matching, all_edges
+                    
+    
 if __name__  == "__main__":
-    model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment()]), verbose=1)
-    model.learn(total_timesteps=50000)
+    model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
+    model.learn(total_timesteps=100000)
 
     num_runs = 16
     model_rewards = []
