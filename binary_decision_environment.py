@@ -1,0 +1,226 @@
+"""
+Currently, the environment is based on using a GNN-based model to classify, for each node, whether or not it should be selected to be put into a greedy matching scheme. However, it could be more efficient to generate cycles using a greedy algorithm or some other system, and then classify whether or those those embedded cycles should be selected right now or later.
+
+Currently, for the purposes of simplifying, I'm using pairs only.
+"""
+
+import gymnasium as gym
+import numpy as np
+import networkx as nx
+from typing import Optional
+from gymnasium.spaces import Discrete, Box, Dict, MultiBinary
+from stable_baselines3.common.vec_env import DummyVecEnv
+from sb3_contrib import RecurrentPPO
+import matplotlib.pyplot as plt
+
+class BinaryDecisionEnvironment(gym.Env):
+    def __init__(
+        self,
+        n_agents: int = 100,
+        n_timesteps: int = 64,
+        departure_time_avg: int = 8,
+        departure_time_std: float = 2,
+        easy_to_easy_rate: float = 0.087,
+        easy_to_hard_rate: float = 0.037,
+        percent_hard: float = 0.7
+    ):
+        super(BinaryDecisionEnvironment, self).__init__()
+        self.n_agents = n_agents
+        self.n_timesteps = n_timesteps
+        self.departure_time_avg = departure_time_avg
+        self.departure_time_std = departure_time_std
+        self.easy_to_easy_rate = easy_to_easy_rate
+        self.easy_to_hard_rate = easy_to_hard_rate
+        self.percent_hard = percent_hard
+
+        self.action_space = MultiBinary(1)
+        self.observation_space = Box(
+            low=0,
+            high=1,
+            shape=(10, ),
+            dtype=np.float32
+        )
+    
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None
+    ):
+        if not seed:
+            seed = np.random.randint(0, 2 ** 32 - 1)
+        self.seed = seed
+        super().reset(seed=seed)
+
+        self.compat = np.zeros((self.n_agents, self.n_agents))
+        self.graph = nx.DiGraph()
+        self.current_timestep = 0
+
+        random_values = self.np_random.random((self.n_agents, self.n_agents))
+
+        self.arrival_times = self.np_random.integers(0, self.n_timesteps, size=self.n_agents)
+        durations = self.np_random.normal(
+            self.departure_time_avg,
+            self.departure_time_std,
+            size=self.n_agents
+        )
+        durations = np.maximum(durations, 1)
+        self.departure_times = np.minimum(
+            self.n_timesteps,
+            self.arrival_times + durations
+        ).astype(int)
+
+        self.is_hard = np.zeros(self.n_agents)
+        hard_count = int(self.n_agents * self.percent_hard)
+        hard_idxs = self.np_random.choice(self.n_agents, size=hard_count, replace=False)
+        easy_idxs = np.array([i for i in range(self.n_agents)if i not in hard_idxs])
+        self.is_hard[hard_idxs] = 1
+
+        self.compat[np.ix_(easy_idxs, easy_idxs)] = random_values[np.ix_(easy_idxs, easy_idxs)] < self.easy_to_easy_rate
+
+        self.compat[np.ix_(easy_idxs, hard_idxs)] = random_values[np.ix_(easy_idxs, hard_idxs)] < self.easy_to_hard_rate
+
+        self.compat[np.ix_(hard_idxs, easy_idxs)] = random_values[np.ix_(hard_idxs, easy_idxs)] < self.easy_to_hard_rate
+
+        self.compat[np.ix_(hard_idxs, hard_idxs)] = 0 
+        self.compat[np.arange(self.n_agents), np.arange(self.n_agents)] = 0
+
+
+        self.active_agents = np.zeros(self.n_agents)
+        self.matched_agents = np.zeros(self.n_agents)
+        
+        self.vetoed_cycles = np.zeros((self.n_agents, self.n_agents))
+
+        return self._get_obs(), {}
+
+    def find_edge(self):
+        htm_edges = []
+        etm_edges = []
+
+        all_edges = list(self.graph.edges())
+        all_edges = sorted(all_edges, key=lambda x: (x[0], x[1]))
+
+        for edge in all_edges:
+            a, b = edge
+            if self.is_hard[a] == 1 and self.is_hard[b] == 1 and not self.vetoed_cycles[a, b]:
+                htm_edges.append(edge)
+            elif not self.vetoed_cycles[a, b]:
+                etm_edges.append(edge)
+        if htm_edges:
+            return htm_edges[0]
+        elif etm_edges:
+            return etm_edges[0]
+        else:
+            return None
+        
+    def add_node(self, node):
+        self.graph.add_node(node)
+        self.active_agents[node] = 1
+        for i in range(self.n_agents):
+            if self.compat[node, i] == 1 and self.active_agents[i] == 1:
+                self.graph.add_edge(node, i)
+                self.graph.add_edge(i, node)
+    
+    def remove_node(self, node):
+        self.graph.remove_node(node)
+        self.active_agents[node] = 0
+
+    def step(self, action):
+        if action:
+            for i in self._get_edge():
+                self.matched_agents[i] = 1
+                self.active_agents[i] = 0
+                self.graph.remove_node(i)
+        else:
+            a, b = self._get_edge()
+            self.vetoed_cycles[a, b] = 1
+            self.vetoed_cycles[b, a] = 1
+
+        # find a different edge
+        new_obs = self._get_obs()
+        # print("Observation: ", new_obs)
+        done = False
+
+        if self.current_timestep >= self.n_timesteps:
+            done = True
+            reward = self._get_reward()
+            return new_obs, reward, done, done, {}
+        
+        return new_obs, 0, done, done, {}
+
+    def _edge_to_feature(self, edge):
+        a, b = edge
+        features = np.zeros(10,)
+        # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b])
+        features[0] = self.current_timestep / self.n_timesteps
+        features[1] = (self.departure_times[a] - self.current_timestep) / (self.departure_times[a] - self.arrival_times[a])
+        features[2] = (self.departure_times[b] - self.current_timestep) / (self.departure_times[b] - self.arrival_times[b])
+        features[3] = self.is_hard[a]
+        features[4] = self.is_hard[b]
+        features[5] = self.current_timestep % (int(self.n_timesteps / 16))
+        features[6] = self.current_timestep % (int(self.n_timesteps / 8))
+        features[7] = self.current_timestep % (int(self.n_timesteps / 4))
+        return features
+    
+    def _get_reward(self):
+        return sum(self.matched_agents) / self.n_agents
+    
+    def _get_edge(self):
+        edge = self.find_edge()
+        while not edge:
+            self.current_timestep += 1
+            if self.current_timestep > self.n_timesteps:
+                return [0, 0]
+            # add arrivals
+            new_arrivals = np.where(self.arrival_times == self.current_timestep)[0]
+            for i in new_arrivals:
+                self.add_node(i)
+            # remove departures
+            new_departures = np.where(self.departure_times == self.current_timestep)[0]
+            for i in new_departures:
+                if self.active_agents[i] == 1:
+                    self.remove_node(i)
+            edge = self.find_edge()
+        return edge
+    
+    def _get_obs(self): # only returns None when the simulation is over
+        edge = self._get_edge()
+        # print("Edge: ", edge)
+        return self._edge_to_feature(edge)
+    
+    def get_greedy_result(self):
+        obs, _ = self.reset(seed=self.seed)
+        done = False
+        reward = 0
+        while not done:
+            action = 1 
+            obs, reward, done, _, _ = self.step(action)
+        return reward
+    
+if __name__  == "__main__":
+    model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment()]), verbose=1)
+    model.learn(total_timesteps=50000)
+
+    num_runs = 16
+    model_rewards = []
+    greedy_rewards = []
+    for _ in range(num_runs):
+        env = BinaryDecisionEnvironment()
+        seed = np.random.randint(0, 2 ** 32 - 1)
+
+        obs, _ = env.reset(seed=seed)
+        done = False
+        while not done:
+            action, _ = model.predict(obs)
+            obs, reward, done, _, _ = env.step(action)
+        model_rewards.append(reward)
+        greedy_reward = env.get_greedy_result()
+        greedy_rewards.append(greedy_reward)
+
+    ratio = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
+    print(f"Model rewards: {model_rewards}")
+    print(f"Greedy rewards: {greedy_rewards}")
+    print(f"Ratio: {ratio}")
+
+    plt.boxplot(ratio)
+    plt.show()
+   

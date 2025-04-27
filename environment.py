@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 import time
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False):
+    def __init__(self, n_agents=1000, p=0.087, q=0.037, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False):
         self.n_agents = n_agents
 
         self.p = p
