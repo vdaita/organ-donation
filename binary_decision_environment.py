@@ -38,7 +38,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.observation_space = Box(
             low=0,
             high=1,
-            shape=(10, ),
+            shape=(15, ),
             dtype=np.float32
         )
     
@@ -152,7 +152,7 @@ class BinaryDecisionEnvironment(gym.Env):
         if current_timestep is None:
             current_timestep = self.current_timestep
         a, b = edge
-        features = np.zeros(10,)
+        features = np.zeros(15,)
         # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b])
         features[0] = current_timestep / self.n_timesteps
         features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
@@ -163,6 +163,20 @@ class BinaryDecisionEnvironment(gym.Env):
         features[6] = current_timestep % (int(self.n_timesteps / 8))
         features[7] = current_timestep % (int(self.n_timesteps / 4))
         features[8] = min(self.departure_times[a] - current_timestep, self. departure_times[b] - current_timestep) / self.n_timesteps
+
+        features[9] = 1.0 if (self.departure_times[a] - current_timestep) <= 2 else 0.0 
+        features[10] = 1.0 if (self.departure_times[b] - current_timestep) <= 2 else 0.0 
+        
+        # number of easy edges for a
+        features[11] = np.sum(self.compat[a, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
+        # number of easy edges for b
+        features[12] = np.sum(self.compat[b, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
+
+        # number of hard edges for a
+        features[13] = np.sum(self.compat[a, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
+        # number of hard edges for b
+        features[14] = np.sum(self.compat[b, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
+
         return features
     
     def _get_reward(self):

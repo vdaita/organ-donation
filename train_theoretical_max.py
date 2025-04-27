@@ -9,11 +9,7 @@ import numpy as np
 from aim import Run
 
 model = nn.Sequential(
-    nn.Linear(10, 128),
-    nn.LayerNorm(128),
-    nn.ReLU(),
-    nn.Dropout(0.2),
-    nn.Linear(128, 128),
+    nn.Linear(12, 128),
     nn.LayerNorm(128),
     nn.ReLU(),
     nn.Dropout(0.2),
@@ -27,8 +23,10 @@ model = nn.Sequential(
 model.apply(lambda m: nn.init.xavier_uniform_(m.weight) if isinstance(m, nn.Linear) else None)
 
 
-lr = 0.0001
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+lr = 0.0005
+weight_decay = 1e-4
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer,
     mode='min',
@@ -39,8 +37,8 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 
 if __name__ == "__main__":
     num_environments = 2048
-    batch_size = 32
-    envs_per_eval = 32
+    batch_size = 64
+    envs_per_eval = 64 * 8
     runs_per_eval = 8
     n_agents = 100
 
@@ -51,7 +49,8 @@ if __name__ == "__main__":
         "batch_size": batch_size,
         "envs_per_eval": envs_per_eval,
         "runs_per_eval": runs_per_eval,
-        "lr": 0.0001,
+        "lr": lr,
+        "weight_decay": weight_decay,
         "n_agents": n_agents
     }
 
@@ -90,7 +89,7 @@ if __name__ == "__main__":
                 features = torch.tensor(features, dtype=torch.float32)
 
                 outputs = model(features)
-                batch_outputs[match_idx] = torch.mean(outputs)
+                batch_outputs[match_idx] = torch.max(outputs)
                 # max_output = torch.max(outputs)
 
                 # if max_output > 0.5:
