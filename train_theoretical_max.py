@@ -5,6 +5,8 @@ from binary_decision_environment import BinaryDecisionEnvironment
 from torch import nn
 from tqdm import tqdm
 import torch
+import numpy as np
+from aim import Run
 
 model = nn.Sequential(
     nn.Linear(10, 64),
@@ -20,34 +22,50 @@ model = nn.Sequential(
 # randomly initialize the model
 model.apply(lambda m: nn.init.xavier_uniform_(m.weight) if isinstance(m, nn.Linear) else None)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+lr = 0.0001
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 if __name__ == "__main__":
     num_environments = 2096
     batch_size = 32
     envs_per_eval = 32
     runs_per_eval = 8
+    n_agents = 250
 
-    env = BinaryDecisionEnvironment(n_agents=250)
+    env = BinaryDecisionEnvironment(n_agents=n_agents)
+    run = Run()
+    run["hparams"] = {
+        "num_environments": num_environments,
+        "batch_size": batch_size,
+        "envs_per_eval": envs_per_eval,
+        "runs_per_eval": runs_per_eval,
+        "lr": 0.0001,
+        "n_agents": n_agents
+    }
+
+    step = 0
 
     for environment_idx in tqdm(range(num_environments)):
-        env.reset()
+        env.reset(seed=environment_idx)
         best_matching, all_edges = env.get_theoretical_max()
         bad_matching = [edge for edge in all_edges if edge not in best_matching]
 
         matchings = best_matching + bad_matching
         scores = ([1] * len(best_matching)) + ([0] * len(bad_matching))
 
+        index_reshuffle = np.random.permutation(len(matchings))
+
         num_matchings = len(matchings)
         
         outputs = torch.zeros(num_matchings, 1)
         for batch in range(0, num_matchings, batch_size):
-            batch_min = batch
-            batch_max = min(batch + batch_size, num_matchings)
+            batch_elements = index_reshuffle[batch:batch + batch_size]
 
-            batch_matchings = matchings[batch_min:batch_max]
-            batch_outputs = torch.zeros(len(batch_matchings), 1)
-            batch_target_scores = torch.tensor(scores[batch_min:batch_max], dtype=torch.float32)
+            batch_matchings = matchings[batch_elements]
+            batch_outputs = torch.zeros(len(batch_matchings))
+            batch_target_scores = torch.tensor(scores[batch_elements], dtype=torch.float32)
+
+            optimizer.zero_grad()
 
             for match_idx, matching in enumerate(batch_matchings):
                 a, b = matching
@@ -63,22 +81,26 @@ if __name__ == "__main__":
             loss = nn.MSELoss()(batch_outputs, batch_target_scores)
             loss.backward()
             optimizer.step()
+        
+            step += 1
+            run.track(loss.item(), name="loss", step=step)
 
         if environment_idx % envs_per_eval == 0:
             model_rewards = []
             greedy_rewards = []
 
             for _ in range(runs_per_eval):
-                env.reset()
                 obs, _ = env.reset(seed=environment_idx)
                 done = False
                 while not done:
-                    action, _ = model(torch.tensor(obs, dtype=torch.float32))
+                    action = model(torch.tensor(obs, dtype=torch.float32))
                     obs, reward, done, _, _ = env.step(action)
                 model_rewards.append(reward)
                 greedy_rewards.append(env.get_greedy_result())
             
-            print("Model rewards: ", model_rewards) 
-            print("Greedy rewards: ", greedy_rewards)
+            print("Model rewards: ", np.mean(model_rewards)) 
+            print("Greedy rewards: ", np.mean(greedy_rewards))
             ratio = [model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)]
-            print("Ratio: ", ratio)
+            print("Ratio: ", np.mean(ratio), " +/- ", np.std(ratio))
+
+            run.track(np.mean(ratio), name="ratio", step=step)
