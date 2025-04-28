@@ -104,12 +104,57 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         probs = self.actor(x)
+        # Reshape probs to match action space
+        if len(probs.shape) == 3:  # [B, N, N]
+            batch_size, n_nodes = probs.shape[0], probs.shape[1]
+        else:  # [N, N]
+            batch_size, n_nodes = 1, probs.shape[0]
+            probs = probs.unsqueeze(0)
+            
+        # Create Bernoulli distribution for each edge
         dist = Bernoulli(probs=probs)
+        
         if action is None:
             action = dist.sample()
+        
         action = action.float()
-        logprob = dist.log_prob(action).sum(dim=-1)
-        return action, logprob, dist.entropy().sum(dim=-1), self.critic(x)
+        
+        # Calculate log probabilities for the entire matrix
+        log_prob = dist.log_prob(action)
+        
+        # Get adjacency matrices to mask log probs
+        device = action.device
+        
+        # Handle adjacency matrix extraction properly
+        if isinstance(x, dict):
+            # Single observation or dictionary of batched observations
+            if isinstance(x["adjacency_matrix"], list):
+                # Handle batched observations in dictionary format
+                adj_matrix = torch.tensor(np.array(x["adjacency_matrix"])).to(device)
+            else:
+                # Handle single observation
+                adj_matrix = torch.tensor(x["adjacency_matrix"]).to(device)
+                if len(adj_matrix.shape) == 2:
+                    adj_matrix = adj_matrix.unsqueeze(0)
+        else:
+            # List of observation dictionaries
+            adj_matrix = torch.stack([torch.tensor(obs["adjacency_matrix"]).to(device) for obs in x])
+        
+        # Make sure adjacency matrix has same shape as log_prob
+        if adj_matrix.shape != log_prob.shape:
+            if len(adj_matrix.shape) < len(log_prob.shape):
+                # Add batch dimension if needed
+                adj_matrix = adj_matrix.unsqueeze(0)
+            
+        # Only count log probs for valid edges
+        masked_log_prob = log_prob * adj_matrix
+        logprob = masked_log_prob.sum(dim=(1, 2))
+        
+        # Same for entropy
+        entropy = dist.entropy() * adj_matrix
+        entropy_sum = entropy.sum(dim=(1, 2))
+        
+        return action, logprob, entropy_sum, self.critic(x)
     
     def evaluate_model(self, step, env, num_runs=16, logger=None):
         self.actor.eval()

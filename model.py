@@ -34,12 +34,9 @@ def get_feature_tensor(obs):
 
     active_agents_count = torch.tensor(torch.sum(active_agents, dim=1))
     active_agents_count = active_agents_count / active_agents.shape[1]
-    # print("active_agents_count: ", active_agents_count.shape)
     active_agents_count = active_agents_count.unsqueeze(1)
     active_agents_count = active_agents_count.unsqueeze(1)
-    # print("active_agents_count: ", active_agents_count.shape)
     active_agents_count = active_agents_count.repeat(1, 1, N)
-    # print("active_agents_count: ", active_agents_count.shape)
 
     time_since_arrival = (timestep - arrival) / (departure - arrival)
     time_since_start = timestep / total_timesteps
@@ -52,13 +49,6 @@ def get_feature_tensor(obs):
     time_since_arrival = time_since_arrival.unsqueeze(1)
     time_since_start = time_since_start.unsqueeze(1)
     is_hard_to_match = is_hard_to_match.unsqueeze(1)
-
-    # print(
-    #     "time_since_arrival: ", time_since_arrival.shape,
-    #     "\ntime_since_start: ", time_since_start.shape,
-    #     "\nmultiples: ", multiples.shape,
-    #     "\nis_hard_to_match: ", is_hard_to_match.shape,
-    # )
 
     node_features = torch.cat([
         time_since_arrival,
@@ -109,7 +99,6 @@ class PairedKidneyBackbone(nn.Module):
 
         B, N, _  = adj_matrix.shape
 
-        # print("node_features: ", node_features.shape)
         x = self.embedding(node_features)
         data_list = []
 
@@ -125,7 +114,6 @@ class PairedKidneyBackbone(nn.Module):
         for layer in self.ffprocess:
             x = x + F.relu(layer(x))
         x = x * active_agents.unsqueeze(-1)
-        # print("Backbone output: ", x.shape)
         return x, active_agents
 
 class PairedKidneyModel(nn.Module):
@@ -133,26 +121,58 @@ class PairedKidneyModel(nn.Module):
         super(PairedKidneyModel, self).__init__()
         
         self.backbone = PairedKidneyBackbone(hidden_dim, num_layers)
-        self.select_fc = nn.Linear((hidden_dim), 1)
+        self.edge_proj1 = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.edge_proj2 = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.edge_score = nn.Linear(hidden_dim, 1)
         
     def reset_parameters(self):
         self.backbone.reset_parameters()
-        nn.init.xavier_uniform_(self.select_fc.weight)
-        if self.select_fc.bias is not None:
-            self.select_fc.bias.data.fill_(-1.0)
+        nn.init.xavier_uniform_(self.edge_proj1.weight)
+        nn.init.xavier_uniform_(self.edge_proj2.weight)
+        nn.init.xavier_uniform_(self.edge_score.weight)
+        if self.edge_score.bias is not None:
+            self.edge_score.bias.data.fill_(-1.0)
 
     def forward(self, obs):
         x, active_agents = self.backbone(obs)
-        x = self.select_fc(x)
-        x = F.sigmoid(x)
-        # print("After sigmoid and select_fc: ", x.shape)
-        # x = x * active_agents.unsqueeze(-1)
-        x = x.squeeze(-1)
-
-        if x.shape[0] == 1:
-            x = x.squeeze(0)
-
-        return x
+        
+        # Handle adjacency matrix extraction properly
+        if isinstance(obs, dict):
+            adj_matrix = torch.tensor(obs["adjacency_matrix"]).to(x.device)
+        else:
+            # Handle case where obs is a list of dictionaries
+            adj_matrix = torch.stack([torch.tensor(o["adjacency_matrix"]) for o in obs]).to(x.device)
+            
+        if len(adj_matrix.shape) == 2:
+            adj_matrix = adj_matrix.unsqueeze(0)
+        
+        batch_size, n_nodes = x.shape[0], x.shape[1]
+        
+        x_i = self.edge_proj1(x)
+        x_j = self.edge_proj2(x)
+        
+        edge_probs = []
+        for b in range(batch_size):
+            x_i_expanded = x_i[b].unsqueeze(1).expand(-1, n_nodes, -1)
+            x_j_expanded = x_j[b].unsqueeze(0).expand(n_nodes, -1, -1)
+            
+            edge_features = torch.cat([x_i_expanded, x_j_expanded], dim=-1)
+            
+            scores = self.edge_score(edge_features).squeeze(-1)
+            
+            probs = torch.sigmoid(scores) * adj_matrix[b]
+            
+            active_mask = torch.outer(active_agents[b], active_agents[b])
+            probs = probs * active_mask
+            
+            edge_probs.append(probs)
+        
+        edge_probs = torch.stack(edge_probs, dim=0)
+        
+        if edge_probs.shape[0] == 1:
+            edge_probs = edge_probs.squeeze(0)
+            
+        return edge_probs
     
 class PairedKidneyCriticModel(nn.Module):
     def __init__(self, hidden_dim, num_layers=3):
@@ -167,27 +187,20 @@ class PairedKidneyCriticModel(nn.Module):
         self.value_fc = nn.Linear(hidden_dim, 1)
     
     def reset_parameters(self):
-        # Reset backbone
         self.backbone.reset_parameters()
         
-        # Reset attention module
         for module in self.attention.modules():
             if hasattr(module, 'reset_parameters'):
                 module.reset_parameters()
         
-        # Reset value head
         nn.init.xavier_uniform_(self.value_fc.weight)
         if self.value_fc.bias is not None:
             nn.init.zeros_(self.value_fc.bias)
 
     def forward(self, obs):
         x, active_agents = self.backbone(obs)
-        # print("After backbone: ", x.shape)
         x = self.attention(x)
-        # print("After attention: ", x.shape)
         x = self.value_fc(x)
-        # print("After value_fc: ", x.shape)
         x = torch.relu(x)
         x = x.flatten()
-        # print("After flatten: ", x.shape)
         return x
