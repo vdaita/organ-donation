@@ -130,15 +130,17 @@ class BinaryDecisionEnvironment(gym.Env):
     def step(self, action):
         self.step_reward = 0
         if action == 1: # accept the edge
-            for i in self._get_edge():
+            a, b = self._get_edge()
+            for i in [a, b]:
                 self.matched_agents[i] = 1
                 self.active_agents[i] = 0
                 self.graph.remove_node(i)
-            self.step_reward += 2 / self.n_agents
+            self.step_reward += (2 / self.n_agents) - (0.025 * self.delayed_cycles[a, b]) / self.n_agents
         elif action == 0: # delay the edge
             a, b = self._get_edge()
-            self.delayed_cycles[a, b] = 1
-            self.delayed_cycles[b, a] = 1
+            self.delayed_cycles[a, b] += 1
+            self.delayed_cycles[b, a] += 1
+            self.step_reward += 0.05 * 2 / self.n_agents
         elif action == 2: # veto the edge completely
             a, b = self._get_edge()
             self.vetoed_cycles[a, b] = 1
@@ -146,10 +148,12 @@ class BinaryDecisionEnvironment(gym.Env):
 
         # find a different edge
         new_obs = self._get_obs()
-        reward = self._get_reward()
         done = self.current_timestep >= self.n_timesteps
+        reward = self.step_reward
+        if done:
+            reward += self._get_reward() * 2
 
-        return new_obs, self._get_reward(), done, done, {}
+        return new_obs, reward, done, done, {}
 
     def _edge_to_feature(self, edge, current_timestep=None):
         if current_timestep is None:
@@ -208,7 +212,7 @@ class BinaryDecisionEnvironment(gym.Env):
             for i in new_departures:
                 if self.active_agents[i] == 1:
                     self.remove_node(i)
-                    self.step_reward -= 1 / self.n_agents
+                    # self.step_reward -= 1 / self.n_agents
 
             edge = self.find_edge()
         return edge
