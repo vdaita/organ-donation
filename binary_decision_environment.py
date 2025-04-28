@@ -40,7 +40,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.observation_space = Box(
             low=0,
             high=1,
-            shape=(16, ),
+            shape=(22, ),
             dtype=np.float32
         )
     
@@ -137,7 +137,12 @@ class BinaryDecisionEnvironment(gym.Env):
                 self.matched_agents[i] = 1
                 self.active_agents[i] = 0
                 self.graph.remove_node(i)
-            self.step_reward += (2 / self.n_agents) - (0.025 * self.delayed_cycles[a, b]) / self.n_agents
+            
+            match_reward = (2 / self.n_agents) - (0.025 * self.delayed_cycles[a, b]) / self.n_agents
+            if self.is_hard[a] or self.is_hard[b]:
+                self.step_reward += match_reward * 3
+            else:
+                self.step_reward += match_reward
         elif action == 0: # delay the edge
             a, b = self._get_edge()
             self.delayed_cycles[a, b] += 1
@@ -150,15 +155,18 @@ class BinaryDecisionEnvironment(gym.Env):
 
         # find a different edge
         new_obs = self._get_obs()
-        done = self.current_timestep >= self.n_timesteps
+        terminated = self.current_timestep >= self.n_timesteps
+        truncated = False
+
         reward = self.step_reward
         if self.is_model:
             reward += self._get_greedy_rollout_score()
         # reward = self.step_reward
-        # if done:
-        #     reward += self._get_reward() * 2
+        # reward = 0
+        if terminated:
+            reward = self._get_reward() * 5
 
-        return new_obs, reward, done, done, {}
+        return new_obs, self.step_reward, terminated, truncated, {}
     
     def _get_greedy_rollout_score(self):
         env_sim = copy.deepcopy(self)
@@ -181,7 +189,7 @@ class BinaryDecisionEnvironment(gym.Env):
         if current_timestep is None:
             current_timestep = self.current_timestep
         a, b = edge
-        features = np.zeros(16,)
+        features = np.zeros(22,)
         # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b]) 
         features[0] = current_timestep / self.n_timesteps
         features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
@@ -209,6 +217,14 @@ class BinaryDecisionEnvironment(gym.Env):
 
         # how large is the graph right now?
         features[15] = np.sum(self.active_agents) / self.n_agents
+
+        # Interactions between features
+        features[16] = features[1] * features[3]  # Interaction between remaining time for a and hardness of a
+        features[17] = features[2] * features[4]  # Interaction between remaining time for b and hardness of b
+        features[18] = features[8] * features[15]  # Interaction between minimum remaining time and graph size
+        features[19] = features[11] * features[12]  # Interaction between easy edges for a and b
+        features[20] = features[13] * features[14]  # Interaction between hard edges for a and b
+        features[21] = features[9] * features[10]  # Interaction between urgency of a and b
 
         return features
     
