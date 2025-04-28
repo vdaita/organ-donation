@@ -34,7 +34,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.easy_to_hard_rate = easy_to_hard_rate
         self.percent_hard = percent_hard
 
-        self.action_space = MultiBinary(1)
+        self.action_space = Discrete(3)
         self.observation_space = Box(
             low=0,
             high=1,
@@ -88,6 +88,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
         
+        self.delayed_cycles = np.zeros((self.n_agents, self.n_agents))
         self.vetoed_cycles = np.zeros((self.n_agents, self.n_agents))
         self.step_reward = 0
 
@@ -102,10 +103,11 @@ class BinaryDecisionEnvironment(gym.Env):
 
         for edge in all_edges:
             a, b = edge
-            if self.is_hard[a] == 1 and self.is_hard[b] == 1 and not self.vetoed_cycles[a, b]:
-                htm_edges.append(edge)
-            elif not self.vetoed_cycles[a, b]:
-                etm_edges.append(edge)
+            if (not self.delayed_cycles[a, b]) and (not self.vetoed_cycles[a, b]):
+                if self.is_hard[a] == 1:
+                    htm_edges.append(edge)
+                else:
+                    etm_edges.append(edge)
         if htm_edges:
             return htm_edges[0]
         elif etm_edges:
@@ -127,13 +129,17 @@ class BinaryDecisionEnvironment(gym.Env):
 
     def step(self, action):
         self.step_reward = 0
-        if action:
+        if action == 1: # accept the edge
             for i in self._get_edge():
                 self.matched_agents[i] = 1
                 self.active_agents[i] = 0
                 self.graph.remove_node(i)
             self.step_reward += 2 / self.n_agents
-        else:
+        elif action == 0: # delay the edge
+            a, b = self._get_edge()
+            self.delayed_cycles[a, b] = 1
+            self.delayed_cycles[b, a] = 1
+        elif action == 2: # veto the edge completely
             a, b = self._get_edge()
             self.vetoed_cycles[a, b] = 1
             self.vetoed_cycles[b, a] = 1
@@ -189,7 +195,7 @@ class BinaryDecisionEnvironment(gym.Env):
         edge = self.find_edge()
         while not edge:
             self.current_timestep += 1 # there is no edge in the current timestep
-            self.vetoed_cycles = np.zeros((self.n_agents, self.n_agents)) # reset the vetoed cycles - should be able to choose at this new timestep, with new circumstances
+            self.delayed_cycles = np.zeros((self.n_agents, self.n_agents)) # reset the vetoed cycles - should be able to choose at this new timestep, with new circumstances
 
             if self.current_timestep > self.n_timesteps:
                 return [0, 0]

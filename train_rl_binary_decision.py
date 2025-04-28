@@ -1,6 +1,6 @@
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from sb3_contrib import RecurrentPPO
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DQN
 import matplotlib.pyplot as plt
 import numpy as np
 from binary_decision_environment import BinaryDecisionEnvironment
@@ -16,8 +16,8 @@ if __name__  == "__main__":
     # model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
     n_envs = 16
     env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
-    model = PPO("MlpPolicy", env, verbose=1, gamma=0.995, tensorboard_log="./tb_runs/")
-    model.learn(total_timesteps=100000)
+    model = DQN("MlpPolicy", env, verbose=1, gamma=0.995, tensorboard_log="./tb_runs/")
+    model.learn(total_timesteps=1000000)
 
     num_runs = 16
     model_rewards = []
