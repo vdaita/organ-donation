@@ -9,7 +9,7 @@ import numpy as np
 import networkx as nx
 from typing import Optional
 from gymnasium.spaces import Discrete, Box, Dict, MultiBinary
-
+import copy
 
 def intersect_ranges(a, b):
     return max(a[0], b[0]) < min(a[1], b[1])
@@ -23,7 +23,8 @@ class BinaryDecisionEnvironment(gym.Env):
         departure_time_std: float = 2,
         easy_to_easy_rate: float = 0.087,
         easy_to_hard_rate: float = 0.037,
-        percent_hard: float = 0.7
+        percent_hard: float = 0.7,
+        is_model: bool = True
     ):
         super(BinaryDecisionEnvironment, self).__init__()
         self.n_agents = n_agents
@@ -33,6 +34,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.easy_to_easy_rate = easy_to_easy_rate
         self.easy_to_hard_rate = easy_to_hard_rate
         self.percent_hard = percent_hard
+        self.is_model = is_model
 
         self.action_space = Discrete(3)
         self.observation_space = Box(
@@ -150,10 +152,30 @@ class BinaryDecisionEnvironment(gym.Env):
         new_obs = self._get_obs()
         done = self.current_timestep >= self.n_timesteps
         reward = self.step_reward
-        if done:
-            reward += self._get_reward() * 2
+        if self.is_model:
+            reward += self._get_greedy_rollout_score()
+        # reward = self.step_reward
+        # if done:
+        #     reward += self._get_reward() * 2
 
         return new_obs, reward, done, done, {}
+    
+    def _get_greedy_rollout_score(self):
+        env_sim = copy.deepcopy(self)
+        env_sim.is_model = False
+        if self.current_timestep >= self.n_timesteps: # this is done
+            return 0
+
+        done = False
+        previous_matched = copy.deepcopy(env_sim.matched_agents)
+
+        while not done:
+            _, _, done, _, _ = env_sim.step(1)
+        
+        current_matched = copy.deepcopy(env_sim.matched_agents)
+        # matched = np.sum(current_matched) - np.sum(previous_matched)
+        return np.sum(current_matched) / self.n_agents
+
 
     def _edge_to_feature(self, edge, current_timestep=None):
         if current_timestep is None:

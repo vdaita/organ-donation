@@ -15,7 +15,8 @@ def make_env(rank):
 if __name__  == "__main__":
     # model = RecurrentPPO("MlpLstmPolicy", DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=250)]), verbose=1)
     n_envs = 16
-    env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
+    # env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
+    env = DummyVecEnv([lambda: BinaryDecisionEnvironment(n_agents=100, n_timesteps=32)])
     model = PPO("MlpPolicy", env, verbose=1, gamma=0.995, tensorboard_log="./tb_runs/")
     model.learn(total_timesteps=300000)
 
