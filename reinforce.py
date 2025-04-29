@@ -7,10 +7,11 @@ from torch import nn
 import torch.nn.functional as F
 import torch
 from torch_geometric.nn import GAT, GlobalAttention, GATv2Conv, global_mean_pool
-from environment import PairedKidneyDonationEnv
+from environment_reinforce import PairedKidneyDonationEnv
 from tqdm import tqdm
 from torch.distributions import Bernoulli
 from torch_geometric.utils import dense_to_sparse
+
 
 # Create a simple graph-based model that will determine, for each edge, whether or not it is a good time to match at this time or not.
 class PKEModel(nn.Module):
@@ -24,7 +25,6 @@ class PKEModel(nn.Module):
         
         self.proj1 = nn.Linear(node_input_feature_dim, self.hidden_dim)
         self.proj2 = nn.Linear(self.hidden_dim, self.hidden_dim)
-        self.proj3 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.conv1 = GATv2Conv(self.hidden_dim, self.hidden_dim // self.num_heads, heads=4, dropout=0.1)
         self.proj4 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.conv2 = GATv2Conv(self.hidden_dim, self.hidden_dim // self.num_heads, heads=4, dropout=0.1)
@@ -43,7 +43,6 @@ class PKEModel(nn.Module):
         # only made to process a single graph at a time
         x = F.dropout(F.relu(self.proj1(x)), p=0.2)
         x = x + F.dropout(F.relu(self.proj2(x)), p=0.2)
-        x = x + F.dropout(F.relu(self.proj3(x)), p=0.2)
 
         sparse_edge_index = dense_to_sparse(edge_index)[0]
 
@@ -83,13 +82,13 @@ class PKEModel(nn.Module):
         if self.episode_logprobs.numel() == 0:
             self.episode_logprobs = logprobs.clone()
         else:
-            self.episode_logprobs = torch.cat([self.logprobs, logprobs], dim=0)
-        print("Action: ", action)
+            self.episode_logprobs = torch.cat([self.episode_logprobs, logprobs], dim=0)
+        # print("Action: ", action)
         return action
     
     def finish_episode(self, reward):
-        print("Finishing episode with reward: ", reward)
-        print("Logprobs: ", self.logprobs)
+        # print("Finishing episode with reward: ", reward)
+        # print("Logprobs: ", self.logprobs)
         self.logprobs.append(torch.sum(self.episode_logprobs))
         self.rewards.append(reward)
         self.episode_logprobs = torch.tensor([])
@@ -142,35 +141,32 @@ policy = PKEModel(node_input_feature_dim=16)
 policy.reset_parameters()
 optimizer = torch.optim.AdamW(policy.parameters(), lr=1e-3)
 
-n_batches = 1024
+n_envs = 128
 envs_per_batch = 8
-batches_per_test = 16
+envs_per_test = 4
 
-env = PairedKidneyDonationEnv(n_agents=150, n_timesteps=64, death_range=[6, 8])
+env = PairedKidneyDonationEnv(n_agents=50, n_timesteps=16, death_range=[6, 8])
 
-for batch_index in tqdm(range(n_batches)):
-    for _ in tqdm(range(envs_per_batch)):
-        obs, _ = env.reset()
+for env_idx in tqdm(range(n_envs)):
+    obs, _ = env.reset()
 
-        # print("Environment: ", "Arrivals: ", env.arrival_times, "Departures: ", env.real_departure_times)
+    done = False
+    while not done:
+        agent_vecs, edge_index = convert_obs_to_tensors(obs)
+        action = policy.sample_action(agent_vecs, edge_index)
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+    policy.finish_episode(reward)
 
-        done = False
-        while not done:
-            agent_vecs, edge_index = convert_obs_to_tensors(obs)
-            action = policy.sample_action(agent_vecs, edge_index)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-        policy.finish_episode(reward)
-    finish_minibatch(policy, optimizer)
-
-    if batch_index % batches_per_test == 0:
+    if (env_idx + 1) % envs_per_batch == 0:
+        finish_minibatch(policy, optimizer)
         policy.eval()
-
         greedy_rewards = []
         model_rewards = []
+        theoretical_maxes = []
         ratios = []
 
-        for _ in tqdm(range(envs_per_batch)):
+        for _ in tqdm(range(envs_per_test)):
             obs, _ = env.reset()
             done = False
             while not done:
@@ -178,20 +174,22 @@ for batch_index in tqdm(range(n_batches)):
                 action = policy(agent_vecs, edge_index)
                 obs, reward, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
-            greedy_reward_for_env = env.get_greedy_percentage()
-            model_reward_for_env = np.sum(env.matched_agents) / env.n_agents
-            ratio = model_reward_for_env / greedy_reward_for_env
-            greedy_rewards.append(greedy_reward_for_env)
-            model_rewards.append(model_reward_for_env)
+            greedy_reward, greedy_percentage = env.get_greedy_percentage()
+            model_percentage = np.sum(env.matched_agents) / env.n_agents
+            ratio = model_percentage / greedy_percentage
+            greedy_rewards.append(greedy_percentage)
+            model_rewards.append(model_percentage)
+            theoretical_maxes.append(env.get_two_cycle_theoretical_max())
             ratios.append(ratio)
 
-        print(f"Batch {batch_index}:")
+        print(f"After environment {env_idx}:")
         print(f"    Greedy reward: {np.mean(greedy_rewards)}")
         print(f"    Model reward: {np.mean(model_rewards)}")
+        print(f"    Theoretical max: {np.mean(theoretical_maxes)}")
         print(f"    Ratio: {np.mean(ratios)}")
         print(f"    Std: {np.std(ratios)}")
         print(f"    Min: {np.min(ratios)}")
         print(f"    Max: {np.max(ratios)}")
- 
+
         policy.train()
             
