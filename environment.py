@@ -190,8 +190,16 @@ class PairedKidneyDonationEnv(gym.Env):
         regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
         reward += (hard_matched_now * 1.5) + (regular_matched_now * 0.5)
 
-        if not is_greedy:
-            reward += self.greedy_future(action) * 0.5 # maximize the future reward
+        if done:
+            if not is_greedy:
+                _, greedy_pct = self.get_greedy_percentage()
+                model_pct = np.sum(self.matched_agents) / self.n_agents
+                improvement = model_pct - greedy_pct
+                if improvement > 0:
+                    reward += improvement * 3
+
+        # if not is_greedy:
+        #     reward += self.greedy_future(action) * 0.5 # maximize the future reward
 
         return self.get_observation(), reward, done, done, self.get_info()
     
