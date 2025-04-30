@@ -131,7 +131,7 @@ class PairedKidneyModel(nn.Module):
         nn.init.xavier_uniform_(self.edge_proj2.weight)
         nn.init.xavier_uniform_(self.edge_score.weight)
         if self.edge_score.bias is not None:
-            self.edge_score.bias.data.fill_(-1.0)
+            self.edge_score.bias.data.fill_(0.0)
 
     def forward(self, obs):
         x, active_agents = self.backbone(obs)

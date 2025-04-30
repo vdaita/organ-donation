@@ -7,22 +7,17 @@ from torch import nn
 import torch.nn.functional as F
 import torch
 from torch_geometric.nn import GAT, GlobalAttention, GATv2Conv, global_mean_pool
-from environment_reinforce import PairedKidneyDonationEnv
 from tqdm import tqdm
 from torch.distributions import Bernoulli
 from torch_geometric.utils import dense_to_sparse
-
-import gymnasium as gym
-import numpy as np
-import networkx as nx
-from gymnasium.spaces import Dict, MultiBinary, Box, Discrete
+from torch.optim.lr_scheduler import StepLR
 
 class SimpleKidneyEnv(gym.Env):
     def __init__(self, n_agents=50, p=0.1, q=0.4, pct_hard=0.6, n_timesteps=100, time_low=4, time_high=8):
         self.n_agents = n_agents
         self.pct_hard = pct_hard
-        self.p = p  # Hard-Easy match probability
-        self.q = q  # Easy-Easy match probability
+        self.p = p
+        self.q = q
         self.n_timesteps = n_timesteps
         self.action_space = MultiBinary((n_agents, n_agents))
         self.observation_space = Dict({
@@ -40,12 +35,10 @@ class SimpleKidneyEnv(gym.Env):
         
     def reset(self, seed=None):
         super().reset(seed=seed)
-        # Create patient population with hard-to-match patients
         self.is_hard = np.zeros(self.n_agents)
         hard_indices = self.np_random.choice(self.n_agents, int(self.n_agents * self.pct_hard), replace=False)
         self.is_hard[hard_indices] = 1
         
-        # Generate compatibility matrix
         self.compat = np.zeros((self.n_agents, self.n_agents))
         r = self.np_random.random((self.n_agents, self.n_agents))
         easy_indices = np.where(self.is_hard == 0)[0]
@@ -53,7 +46,6 @@ class SimpleKidneyEnv(gym.Env):
         self.compat[np.ix_(easy_indices, hard_indices)] = r[np.ix_(easy_indices, hard_indices)] < self.p
         self.compat[np.ix_(easy_indices, easy_indices)] = r[np.ix_(easy_indices, easy_indices)] < self.q
         
-        # Generate arrivals (evenly distributed to ensure activity every step)
         arrivals_per_step = max(1, self.n_agents // self.n_timesteps)
         self.arrivals = []
         for t in range(self.n_timesteps):
@@ -65,7 +57,6 @@ class SimpleKidneyEnv(gym.Env):
         self.arrivals = np.array(self.arrivals)
         self.np_random.shuffle(self.arrivals)
         
-        # Generate departure times
         self.departures = np.minimum(self.arrivals + self.np_random.integers(self.time_low, self.time_high, self.n_agents), self.n_timesteps)
         
         self.active = np.zeros(self.n_agents)
@@ -81,32 +72,25 @@ class SimpleKidneyEnv(gym.Env):
         action = action > 0.5
         prev_matched = np.copy(self.matched)
         
-        # Process matchings if there are valid edges
         adj_matrix = nx.adjacency_matrix(self.graph).toarray()
-
         valid_edges = adj_matrix * np.outer(self.active, self.active) * action
         
         if np.sum(valid_edges) > 0:
-            # Create subgraph of selected edges
             edges = np.where(valid_edges > 0)
             undirected = nx.Graph()
             
-            # Only keep mutual edges for matching
             for i in range(len(edges[0])):
                 u, v = edges[0][i], edges[1][i]
-                if valid_edges[v, u] > 0:  # If mutual edge exists
+                if valid_edges[v, u] > 0:
                     undirected.add_edge(u, v)
             
             if method == "max_weight":
-                # Use maximum cardinality matching
                 matches = nx.max_weight_matching(undirected)
                 for u, v in matches:
                     self._match_nodes(u, v)
             else:
-                # Use greedy matching prioritizing hard-to-match patients
                 self._greedy_matching(undirected)
         
-        # Process arrivals and add new edges
         new_arrivals = np.where(self.arrivals == self.current_step)[0]
         for i in new_arrivals:
             self.active[i] = 1
@@ -117,18 +101,15 @@ class SimpleKidneyEnv(gym.Env):
                     if self.compat[j, i]:
                         self.graph.add_edge(j, i)
         
-        # Process departures
         departures = np.where(self.departures == self.current_step)[0]
         for i in departures:
             if self.active[i]:
                 self.active[i] = 0
                 self.graph.remove_edges_from(list(self.graph.in_edges(i)) + list(self.graph.out_edges(i)))
         
-        # Calculate reward and check termination
         self.current_step += 1
         done = self.current_step >= self.n_timesteps
         
-        # Calculate weighted reward based on hard/easy matches
         newly_matched = self.matched - prev_matched
         hard_matched = np.sum(newly_matched * self.is_hard) / max(1, np.sum(self.is_hard))
         easy_matched = np.sum(newly_matched * (1 - self.is_hard)) / max(1, np.sum(1 - self.is_hard))
@@ -137,14 +118,12 @@ class SimpleKidneyEnv(gym.Env):
         return self._get_obs(), reward, done, done, {"total_matched": np.sum(self.matched)}
     
     def _match_nodes(self, u, v):
-        # Mark nodes as matched and remove their edges
         for node in [u, v]:
             self.graph.remove_edges_from(list(self.graph.in_edges(node)) + list(self.graph.out_edges(node)))
             self.active[node] = 0
             self.matched[node] = 1
     
     def _greedy_matching(self, graph):
-        # Sort edges by priority (hard-to-match patients first)
         edges = [(u, v, self.is_hard[u] + self.is_hard[v]) for u, v in graph.edges()]
         edges.sort(key=lambda x: x[2], reverse=True)
         
@@ -166,8 +145,7 @@ class SimpleKidneyEnv(gym.Env):
         }
         
     def get_greedy_percentage(self):
-        # Clone environment and run with greedy matching
-        env_copy = SimpleKidneyEnv(self.n_agents, self.p, self.q, self.pct_hard, self.n_timesteps)
+        env_copy = SimpleKidneyEnv(self.n_agents, self.p, self.q, self.pct_hard, self.n_timesteps, self.time_low, self.time_high)
         env_copy.reset(seed=getattr(self, "seed", None))
         env_copy.compat = self.compat.copy()
         env_copy.arrivals = self.arrivals.copy()
@@ -177,16 +155,14 @@ class SimpleKidneyEnv(gym.Env):
         done = False
         total_reward = 0
         while not done:
-            # Create full action matrix (consider all edges)
             action = np.ones((self.n_agents, self.n_agents))
             _, reward, done, _, _ = env_copy.step(action, method="greedy")
             total_reward += reward
             
         return total_reward, np.sum(env_copy.matched) / self.n_agents
 
-# Create a simple graph-based model that will determine, for each edge, whether or not it is a good time to match at this time or not.
 class PKEModel(nn.Module):
-    def __init__(self, node_input_feature_dim=16, hidden_dim=64, num_heads=4):
+    def __init__(self, node_input_feature_dim=12, hidden_dim=64, num_heads=4):
         super(PKEModel, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -201,17 +177,17 @@ class PKEModel(nn.Module):
         self.conv2 = GATv2Conv(self.hidden_dim, self.hidden_dim // self.num_heads, heads=4, dropout=0.1)
         self.proj5 = nn.Linear(self.hidden_dim, self.hidden_dim)
 
-        # now, project the output for each edge
         self.edge_proj1 = nn.Linear(self.hidden_dim * 2, self.hidden_dim)
         self.edge_proj2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.edge_proj3 = nn.Linear(self.hidden_dim, 1)
 
-        self.episode_logprobs = torch.tensor([])
+        self.episode_logprobs = []
+        self.episode_distributions = []
         self.rewards = []
         self.logprobs = []
+        self.entropies = []
 
     def forward(self, x, edge_index):
-        # only made to process a single graph at a time
         x = F.dropout(F.relu(self.proj1(x)), p=0.2)
         x = x + F.dropout(F.relu(self.proj2(x)), p=0.2)
 
@@ -222,7 +198,6 @@ class PKEModel(nn.Module):
         x = x + self.conv2(x, sparse_edge_index)
         x = x + F.dropout(F.relu(self.proj5(x)), p=0.2)
 
-        # now, for each of the edges, create a vector
         edges = []
         edge_ids = []
         for i in range(edge_index.shape[0]):
@@ -231,12 +206,14 @@ class PKEModel(nn.Module):
                     edges.append(torch.cat([x[i], x[j]], dim=-1))
                     edge_ids.append((i, j))
         
+        if not edge_ids:
+            return torch.zeros((edge_index.shape[0], edge_index.shape[1]), device=edge_index.device)
+
         edges = torch.stack(edges, dim=0)
 
-        # process the edges
         edges = self.edge_proj1(edges)
         edges = F.dropout(F.relu(self.edge_proj2(edges)), p=0.2)
-        edges = F.sigmoid(self.edge_proj3(edges))
+        edges = torch.sigmoid(self.edge_proj3(edges))
 
         output_matrix = torch.zeros((edge_index.shape[0], edge_index.shape[1]), device=edge_index.device)
         for i in range(len(edge_ids)):
@@ -252,118 +229,209 @@ class PKEModel(nn.Module):
 
     def sample_action(self, obs, edge_index):
         probs = self(obs, edge_index)
+        probs = torch.clamp(probs, 1e-6, 1 - 1e-6)
         dist = Bernoulli(probs=probs)
         action = dist.sample()
-        logprobs = dist.log_prob(action)
-        if self.episode_logprobs.numel() == 0:
-            self.episode_logprobs = logprobs.clone()
-        else:
-            self.episode_logprobs = torch.cat([self.episode_logprobs, logprobs], dim=0)
-        # print("Action: ", action)
+        self.episode_logprobs.append(dist.log_prob(action))
+        self.episode_distributions.append(dist)
         return action
     
     def finish_episode(self, reward):
-        # print("Finishing episode with reward: ", reward)
-        # print("Logprobs: ", self.logprobs)
-        self.logprobs.append(torch.sum(self.episode_logprobs))
-        self.rewards.append(reward)
-        self.episode_logprobs = torch.tensor([])
-        
+        if not self.episode_logprobs:
+            self.episode_logprobs = []
+            self.episode_distributions = []
+            return
 
-def finish_minibatch(model, optimizer):
-    rewards = torch.tensor(model.rewards)
+        episode_total_logprob = torch.sum(torch.stack(self.episode_logprobs))
+        episode_total_entropy = torch.sum(torch.stack([d.entropy().sum() for d in self.episode_distributions]))
+
+        self.logprobs.append(episode_total_logprob)
+        self.entropies.append(episode_total_entropy)
+        self.rewards.append(reward)
+
+        self.episode_logprobs = []
+        self.episode_distributions = []
+
+def finish_minibatch(model, optimizer, entropy_coeff=0.01, clip_grad_norm=1.0):
+    if not model.rewards:
+        print("Warning: Trying to finish minibatch with no episode data.")
+        return
+        
+    rewards = torch.tensor(model.rewards, dtype=torch.float32)
     rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+    
     logprobs = torch.stack(model.logprobs)
+    entropies = torch.stack(model.entropies)
+    
+    policy_loss = -torch.mean(logprobs * rewards)
+    entropy_loss = -torch.mean(entropies)
+    
+    loss = policy_loss + entropy_coeff * entropy_loss
+    
     optimizer.zero_grad()
-    loss = -torch.mean(logprobs * rewards)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
     optimizer.step()
 
     model.logprobs = []
     model.rewards = []
+    model.entropies = []
 
 def convert_obs_to_tensors(obs, total_timesteps):
     n_agents = obs["active"].shape[0]
-    agent_vecs = torch.zeros((n_agents, 16))
+    agent_vecs = torch.zeros((n_agents, 12))
+    adj_matrix = obs["adjacency"]
+    
+    in_degree = np.sum(adj_matrix, axis=0)
+    out_degree = np.sum(adj_matrix, axis=1)
+    
+    max_degree = n_agents - 1
+
     for agent_idx in range(n_agents):
-        # Feature population for both active and inactive agents
-        if (obs["departures"][agent_idx] - obs["arrivals"][agent_idx]) == 0:
-            print("Offending departure: ", obs["departures"][agent_idx])
-            print("Offending arrival: ", obs["arrivals"][agent_idx])
-            
-        agent_vecs[agent_idx, 0] = (obs["timestep"] - obs["arrivals"][agent_idx]) / max(1, obs["departures"][agent_idx] - obs["arrivals"][agent_idx])
+        time_in_pool = obs["timestep"] - obs["arrivals"][agent_idx]
+        total_possible_time = obs["departures"][agent_idx] - obs["arrivals"][agent_idx]
+        
+        if total_possible_time <= 0:
+            time_frac = 1.0
+        else:
+            time_frac = time_in_pool / total_possible_time
+             
+        agent_vecs[agent_idx, 0] = time_frac
         agent_vecs[agent_idx, 1] = obs["is_hard"][agent_idx]
         agent_vecs[agent_idx, 2] = obs["timestep"] / total_timesteps
-        agent_vecs[agent_idx, 3] = obs["active"][agent_idx]  # Add active status as feature
+        agent_vecs[agent_idx, 3] = obs["active"][agent_idx]
         
-        # Time-based features
-        agent_vecs[agent_idx, 4] = obs["timestep"] % 3
-        agent_vecs[agent_idx, 5] = obs["timestep"] % 4
-        agent_vecs[agent_idx, 6] = obs["timestep"] % 5
-        agent_vecs[agent_idx, 7] = obs["timestep"] % 7
+        agent_vecs[agent_idx, 4] = (obs["timestep"] % 3) / 2.0
+        agent_vecs[agent_idx, 5] = (obs["timestep"] % 4) / 3.0
+        agent_vecs[agent_idx, 6] = (obs["timestep"] % 5) / 4.0
+        agent_vecs[agent_idx, 7] = (obs["timestep"] % 7) / 6.0
         
-        # Add urgency feature for all agents
-        agent_vecs[agent_idx, 8] = max(0, (obs["departures"][agent_idx] - obs["timestep"])) / total_timesteps
-        agent_vecs[agent_idx, 9] = ((obs["departures"][agent_idx] - obs["timestep"]) <= 2) * 1.0
-    return agent_vecs, torch.tensor(obs["adjacency"])
+        time_to_departure = obs["departures"][agent_idx] - obs["timestep"]
+        agent_vecs[agent_idx, 8] = max(0, time_to_departure) / total_timesteps
+        agent_vecs[agent_idx, 9] = (time_to_departure <= 2 and time_to_departure > 0) * 1.0
+
+        agent_vecs[agent_idx, 10] = in_degree[agent_idx] / max(1, max_degree)
+        agent_vecs[agent_idx, 11] = out_degree[agent_idx] / max(1, max_degree)
+
+    return agent_vecs, torch.tensor(adj_matrix, dtype=torch.float32)
 
 
-policy = PKEModel(node_input_feature_dim=16)
-policy.reset_parameters()
-optimizer = torch.optim.AdamW(policy.parameters(), lr=1e-3)
+if __name__ == "__main__":
+    policy = PKEModel(node_input_feature_dim=12)
+    policy.reset_parameters()
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=1e-4)
+    scheduler = StepLR(optimizer, step_size=100, gamma=0.9)
 
-n_envs = 128
-envs_per_batch = 8
-envs_per_test = 4
+    n_envs = 16384
+    envs_per_batch = 32
+    envs_per_test = 16
 
-env = SimpleKidneyEnv(n_timesteps=30, time_low=4, time_high=6)
+    env = SimpleKidneyEnv(n_agents=100, n_timesteps=32, time_low=8, time_high=12, p=0.037, q=0.087, pct_hard=0.6)
 
-for env_idx in tqdm(range(n_envs)):
-    obs, _ = env.reset()
+    all_greedy_rewards = []
+    all_model_rewards = []
+    all_ratios = []
 
-    done = False
-    while not done:
-        agent_vecs, edge_index = convert_obs_to_tensors(obs, env.n_timesteps)
-        if np.sum(obs["adjacency"]) == 0:
-            action = np.zeros((env.n_agents, env.n_agents))
-        else:
-            action = policy.sample_action(agent_vecs, edge_index).cpu().detach().numpy()
-        obs, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-    policy.finish_episode(reward)
-
-    if (env_idx + 1) % envs_per_batch == 0:
-        finish_minibatch(policy, optimizer)
-        policy.eval()
-        greedy_rewards = []
-        model_rewards = []
-        ratios = []
-
-        for _ in tqdm(range(envs_per_test)):
+    num_batches = n_envs // envs_per_batch
+    for batch_idx in tqdm(range(num_batches), desc="Training Batches"):
+        policy.train()
+        for env_run in range(envs_per_batch):
             obs, _ = env.reset()
             done = False
             while not done:
                 agent_vecs, edge_index = convert_obs_to_tensors(obs, env.n_timesteps)
-                if np.sum(obs["adjacency"]) == 0:
-                    action = np.zeros((env.n_agents, env.n_agents))
+                
+                if torch.sum(edge_index) == 0:
+                    action_tensor = torch.zeros_like(edge_index)
+                    action = action_tensor.cpu().numpy()
                 else:
-                    action = policy(agent_vecs, edge_index).cpu().detach().numpy()
+                    action_tensor = policy.sample_action(agent_vecs, edge_index)
+                    action = action_tensor.cpu().detach().numpy()
+
                 obs, reward, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
-            greedy_reward, greedy_percentage = env.get_greedy_percentage()
-            model_percentage = np.sum(env.matched) / env.n_agents
-            ratio = model_percentage / greedy_percentage
-            greedy_rewards.append(greedy_percentage)
-            model_rewards.append(model_percentage)
-            ratios.append(ratio)
+            
+            policy.finish_episode(reward)
 
-        print(f"After environment {env_idx}:")
-        print(f"    Greedy reward: {np.mean(greedy_rewards)}")
-        print(f"    Model reward: {np.mean(model_rewards)}")
-        print(f"    Ratio: {np.mean(ratios)}")
-        print(f"    Std: {np.std(ratios)}")
-        print(f"    Min: {np.min(ratios)}")
-        print(f"    Max: {np.max(ratios)}")
+        finish_minibatch(policy, optimizer, entropy_coeff=0.01, clip_grad_norm=1.0)
+        scheduler.step()
 
-        policy.train()
+        if (batch_idx + 1) % 5 == 0:
+            policy.eval()
+            batch_greedy_rewards = []
+            batch_model_rewards = []
+            batch_ratios = []
+
+            with torch.no_grad():
+                for _ in range(envs_per_test):
+                    obs, _ = env.reset()
+                    initial_compat = env.compat.copy()
+                    initial_arrivals = env.arrivals.copy()
+                    initial_departures = env.departures.copy()
+                    initial_is_hard = env.is_hard.copy()
+                    
+                    done = False
+                    model_total_reward = 0
+                    while not done:
+                        agent_vecs, edge_index = convert_obs_to_tensors(obs, env.n_timesteps)
+                        if torch.sum(edge_index) == 0:
+                            action = np.zeros((env.n_agents, env.n_agents))
+                        else:
+                            action_probs = policy(agent_vecs, edge_index)
+                            action = (action_probs > 0.5).cpu().numpy()
+                            
+                        obs, reward, terminated, truncated, info = env.step(action)
+                        model_total_reward += reward
+                        done = terminated or truncated
+                    
+                    env_copy = SimpleKidneyEnv(env.n_agents, env.p, env.q, env.pct_hard, env.n_timesteps, env.time_low, env.time_high)
+                    env_copy.reset(seed=getattr(env, "_np_random_seed", None))
+                    env_copy.compat = initial_compat
+                    env_copy.arrivals = initial_arrivals
+                    env_copy.departures = initial_departures
+                    env_copy.is_hard = initial_is_hard
+                    env_copy.active = np.zeros(env_copy.n_agents)
+                    env_copy.matched = np.zeros(env_copy.n_agents)
+                    env_copy.current_step = 0
+                    env_copy.graph = nx.DiGraph()
+                    for i in range(env_copy.n_agents): env_copy.graph.add_node(i)
+                    new_arrivals = np.where(env_copy.arrivals == env_copy.current_step)[0]
+                    for i in new_arrivals: env_copy.active[i] = 1
+
+                    greedy_done = False
+                    greedy_total_reward = 0
+                    while not greedy_done:
+                        greedy_action = np.ones((env.n_agents, env.n_agents))
+                        _, greedy_step_reward, greedy_done, _, _ = env_copy.step(greedy_action, method="greedy")
+                        greedy_total_reward += greedy_step_reward
+
+                    greedy_percentage = np.sum(env_copy.matched) / env.n_agents
+                    model_percentage = np.sum(env.matched) / env.n_agents
+                    
+                    ratio = model_percentage / greedy_percentage if greedy_percentage > 0 else 0
+                    
+                    batch_greedy_rewards.append(greedy_percentage)
+                    batch_model_rewards.append(model_percentage)
+                    batch_ratios.append(ratio)
+
+            avg_greedy = np.mean(batch_greedy_rewards)
+            avg_model = np.mean(batch_model_rewards)
+            avg_ratio = np.mean(batch_ratios)
+            std_ratio = np.std(batch_ratios)
+            min_ratio = np.min(batch_ratios)
+            max_ratio = np.max(batch_ratios)
+
+            all_greedy_rewards.append(avg_greedy)
+            all_model_rewards.append(avg_model)
+            all_ratios.append(avg_ratio)
+
+            print(f"\n--- Evaluation after Batch {batch_idx + 1} ---")
+            print(f"    LR: {scheduler.get_last_lr()[0]:.6f}")
+            print(f"    Avg Greedy Matched %: {avg_greedy:.4f}")
+            print(f"    Avg Model Matched %:  {avg_model:.4f}")
+            print(f"    Avg Ratio (Model/Greedy): {avg_ratio:.4f}")
+            print(f"    Std Ratio: {std_ratio:.4f}")
+            print(f"    Min Ratio: {min_ratio:.4f}")
+            print(f"    Max Ratio: {max_ratio:.4f}")
+            print(f"------------------------------------\n")
 

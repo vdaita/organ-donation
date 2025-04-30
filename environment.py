@@ -183,20 +183,20 @@ class PairedKidneyDonationEnv(gym.Env):
         done = self.current_step == self.n_timesteps
 
         unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-        reward = (-unmatched_departures) * (0.25)
+        reward = (-unmatched_departures) * (0.5)
         matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
 
         hard_matched_now = np.sum((self.matched_agents - previous_matched) * self.is_hard_to_match) / max(1, np.sum(self.is_hard_to_match))
         regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
-        reward += (hard_matched_now * 1.5) + (regular_matched_now * 0.5)
+        reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
 
-        if done:
-            if not is_greedy:
-                _, greedy_pct = self.get_greedy_percentage()
-                model_pct = np.sum(self.matched_agents) / self.n_agents
-                improvement = model_pct - greedy_pct
-                if improvement > 0:
-                    reward += improvement * 3
+        # if done:
+        #     if not is_greedy:
+        #         _, greedy_pct = self.get_greedy_percentage()
+        #         model_pct = np.sum(self.matched_agents) / self.n_agents
+        #         improvement = model_pct - greedy_pct
+        #         if improvement > 0:
+        #             reward += improvement * 3
 
         # if not is_greedy:
         #     reward += self.greedy_future(action) * 0.5 # maximize the future reward
@@ -308,4 +308,8 @@ class PairedKidneyDonationEnv(gym.Env):
             action = self.active_agents
             obs, new_reward, done, _, info = self.step(action, is_greedy=True)
             reward += new_reward
-        return reward, (sum(self.matched_agents) / self.n_agents)
+        return (sum(self.matched_agents) / self.n_agents)
+    
+
+    def get_percentage(self):
+        return sum(self.matched_agents) / self.n_agents

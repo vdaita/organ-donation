@@ -36,7 +36,7 @@ class Args:
     """the entity (team) of wandb's project"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 163800
+    total_timesteps: int = 100000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-5
     """the learning rate of the optimizer"""
@@ -46,7 +46,7 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.998
+    gamma: float = 0.999
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -79,13 +79,13 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     # environment configurations
-    n_agents = 250
-    n_timesteps = 64
-    death_low = 6
-    death_high = 8
-    use_cycles = True
-    p = 0.02
-    q = 0.05
+    n_agents = 100
+    n_timesteps = 32
+    death_low = 12
+    death_high = 14
+    use_cycles = False
+    p = 0.08
+    q = 0.04
     pct_hard = 0.7
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
