@@ -19,13 +19,13 @@ class PairedKidneyDonationEnv(gym.Env):
         self.use_cycles = use_cycles
         self.n_timesteps = n_timesteps
         self.observation_space = Dict({
-            "adjacency_matrix": MultiBinary((n_agents, n_agents)),
+            "adjacency": MultiBinary((n_agents, n_agents)),
             "timestep": Discrete(n_timesteps),
             "arrivals": Box(low=0, high=n_timesteps, shape=(n_agents,), dtype=np.int32),
             "departures": Box(low=0, high=float('inf'), shape=(n_agents,), dtype=np.float32),
-            "is_hard_to_match": MultiBinary(n_agents),
-            "active_agents": MultiBinary(n_agents),
-            "matched_agents": MultiBinary(n_agents),
+            "is_hard": MultiBinary(n_agents),
+            "active": MultiBinary(n_agents),
+            "matched": MultiBinary(n_agents),
             "total_timesteps": Discrete(n_timesteps + 1)  # +1 because it includes n_timesteps
         })
         # Change action space from nodes to edges (adjacency matrix)
@@ -96,13 +96,13 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def get_observation(self):
         return {
-            "adjacency_matrix": nx.adjacency_matrix(self.current_graph).toarray().astype(np.int8) if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
+            "adjacency": nx.adjacency_matrix(self.current_graph).toarray().astype(np.int8) if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
             "timestep": self.current_step,
             "arrivals": self.arrival_times.astype(np.int8),
             "departures": self.real_departure_times.astype(np.int8),
-            "is_hard_to_match": self.is_hard_to_match.astype(np.int8),
-            "active_agents": self.active_agents.astype(np.int8),
-            "matched_agents": self.matched_agents.astype(np.int8),
+            "is_hard": self.is_hard_to_match.astype(np.int8),
+            "active": self.active_agents.astype(np.int8),
+            "matched": self.matched_agents.astype(np.int8),
             "total_timesteps": self.n_timesteps
         }
     def clear_node_edges(self, node):
