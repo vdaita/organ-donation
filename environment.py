@@ -190,9 +190,12 @@ class PairedKidneyDonationEnv(gym.Env):
             reward = 0
             if done:
                 if not is_greedy:
-                    greedy_pct = self.get_greedy_percentage()
                     model_pct = np.sum(self.matched_agents) / self.n_agents
+                    # print("Model percentage: ", model_pct)
+
+                    greedy_pct = self.get_greedy_percentage()
                     reward = model_pct / greedy_pct
+                    # print("Reward: ", reward)
         else:
             unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
             reward = (-unmatched_departures) * (0.5)
@@ -327,6 +330,7 @@ class PairedKidneyDonationEnv(gym.Env):
             action = self.active_agents
             obs, new_reward, done, _, info = self.step(action, is_greedy=True)
             reward += new_reward
+        # print("Greedy percentage: ", sum(self.matched_agents) / self.n_agents)
         return (sum(self.matched_agents) / self.n_agents)
     
 
