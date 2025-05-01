@@ -195,8 +195,8 @@ class BinaryDecisionEnvironment(gym.Env):
         features[2] = current_timestep % 2
         features[3] = current_timestep % 3
         features[4] = current_timestep % 5
-        features[5] = 1.0 if (self.departure_times[a] - current_timestep) <= 2 else 0.0 # patient 1
-        features[6] = 1.0 if (self.departure_times[b] - current_timestep) <= 2 else 0.0 # patient
+        features[5] = 1.0 if (self.departure_times[a] - current_timestep) <= 1 else 0.0 # patient 1
+        features[6] = 1.0 if (self.departure_times[b] - current_timestep) <= 1 else 0.0 # patient
         features[7] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
         features[8] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
         return features
@@ -280,7 +280,18 @@ class BinaryDecisionEnvironment(gym.Env):
         done = False
         reward = 0
         while not done:
-            action = 1 
+            action = 1
+            obs, reward, done, _, _ = self.step(action)
+        
+        final_reward = (np.sum(self.matched_agents)) / self.n_agents
+        return final_reward
+
+    def get_patient_result(self):
+        obs, _ = self.reset(seed=self.seed)
+        done = False
+        reward = 0
+        while not done:
+            action = (obs[5] == 1 or obs[6] == 1)
             obs, reward, done, _, _ = self.step(action)
         
         final_reward = (np.sum(self.matched_agents)) / self.n_agents

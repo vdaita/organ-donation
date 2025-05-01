@@ -9,12 +9,17 @@ num_input_features = 9
 num_envs = 8
 lr = 0.1
 
+# binary_decision_model = nn.Sequential(
+#     nn.Linear(num_input_features, 16),
+#     nn.ReLU(),
+#     nn.Linear(16, 8),
+#     nn.ReLU(),
+#     nn.Linear(8, 1),
+#     nn.Sigmoid()
+# )
+
 binary_decision_model = nn.Sequential(
-    nn.Linear(num_input_features, 16),
-    nn.ReLU(),
-    nn.Linear(16, 8),
-    nn.ReLU(),
-    nn.Linear(8, 1),
+    nn.Linear(num_input_features, 1),
     nn.Sigmoid()
 )
 
@@ -30,9 +35,11 @@ def update_model(model, parameter_changes, rewards):
     parameters = nn.utils.parameters_to_vector(model.parameters())
 
     rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+    print("New rewards: ", rewards)
     
     positive_indices = rewards > 0
     # print("Positive indices:", positive_indices)
+    print("Parameter changes shape:", parameter_changes.shape)
     
     parameter_changes = parameter_changes[positive_indices]
     rewards = rewards[positive_indices]
@@ -48,7 +55,7 @@ def update_model(model, parameter_changes, rewards):
 def evaluate_model(model, seeds=[]):
     env = BinaryDecisionEnvironment(n_agents=250, n_timesteps=64)
     model_rewards = []
-    greedy_rewards = []
+
     for seed in tqdm(seeds, desc="Evaluating seeds", leave=False):
         env = BinaryDecisionEnvironment()
         obs, _ = env.reset(seed=seed)
@@ -60,9 +67,7 @@ def evaluate_model(model, seeds=[]):
             obs, reward, done, _, _ = env.step(action > 0.5)
 
         model_rewards.append(np.sum(env.matched_agents) / env.n_agents)
-        greedy_reward = env.get_greedy_result()
-        greedy_rewards.append(greedy_reward)
-    return np.mean([model_reward / greedy_reward for model_reward, greedy_reward in zip(model_rewards, greedy_rewards)])
+    return np.array(model_rewards)
 
 if __name__ == "__main__":
     parameters = nn.utils.parameters_to_vector(binary_decision_model.parameters())
@@ -81,12 +86,33 @@ if __name__ == "__main__":
         parameter_changes = torch.randn(population_size, num_parameters)
         parameter_changes = parameter_changes * change_size
         new_population = parameter_changes + parameters
+
+        greedy_results = []
+        patient_results = []
+        for seed in tqdm(seeds):
+            env = BinaryDecisionEnvironment()
+            obs, _ = env.reset(seed=seed)
+            greedy_results.append(env.get_greedy_result())
+            patient_results.append(env.get_patient_result())
+
+        greedy_results = torch.tensor(greedy_results)
+        patient_results = torch.tensor(patient_results)
+
+        # print("Greedy results:", greedy_results)
+        # print("Patient results:", patient_results)
+
         results = []
         for i in tqdm(range(population_size), desc="Evaluating population", leave=False):
             new_parameters = new_population[i]
             torch.nn.utils.vector_to_parameters(new_parameters, binary_decision_model.parameters())
             result = evaluate_model(binary_decision_model, seeds=seeds)
             results.append(result)
-        results = torch.tensor(results, dtype=torch.float32)
-        print("Results:", results)
-        parameters = update_model(binary_decision_model, parameter_changes, results)
+        results = torch.tensor(results)
+
+        greedy_ratio = results / greedy_results
+        patient_ratio = results / patient_results
+        mean_results = torch.mean(results, dim=-1)
+        ratio = torch.mean(greedy_ratio, dim=-1)
+        print("Greedy ratio: ", ratio)
+
+        parameters = update_model(binary_decision_model, parameter_changes, mean_results)
