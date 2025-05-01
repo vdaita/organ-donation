@@ -82,18 +82,21 @@ def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=
     n_agents = 50
     n_timesteps = 16
     death_range = [10, 14]
+    easy_match_rate = 0.087 * 2
+    hard_match_rate = 0.037 * 2
 
     def generate_env(seed=None):
         return PairedKidneyDonationEnv(
             n_agents=n_agents,
             n_timesteps=n_timesteps,
             death_range=death_range,
-            seed=seed
+            seed=seed,
+            p=easy_match_rate,
+            q=hard_match_rate,
+            greedy_comp_mode=True
         )
 
     seeds = np.random.randint(0, 10000, n_runs)
-    envs = [lambda: generate_env(seed=int(seed)) for seed in seeds]
-    env = gym.vector.SyncVectorEnv(envs)
 
     # Prepare model clones for each parameter set
     models = []
@@ -106,6 +109,8 @@ def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=
     rewards = []
 
     for model_index, model in tqdm(enumerate(models)):
+        envs = [lambda: generate_env(seed=int(seed)) for seed in seeds]
+        env = gym.vector.SyncVectorEnv(envs)
         obs, _ = env.reset()
         done = False
         total_reward = np.zeros(n_runs)
@@ -123,11 +128,12 @@ def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=
 
 model = SimpleBatchedPKEModel(hidden_dim=16)
 num_parameters = sum(p.numel() for p in model.parameters())
+print("Number of parameters: ", num_parameters)
 
 num_epochs = 40
-num_selected = 8
+num_selected = 32
 parameters = torch.randn(num_selected, num_parameters)
-best_k = 2
+best_k = 4
 num_children = (num_selected // best_k) - 1
 
 thetas = np.linspace(0.1, 0.7, best_k)
