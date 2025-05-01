@@ -187,8 +187,8 @@ if __name__ == "__main__":
     print(f"Using {n_perturbations} perturbations for NES")
     n_eval_runs = 4
     n_final_eval_runs = 16
-    initial_perturb_size = 0.1  # Usually smaller in NES
-    learning_rate = 0.01        # Learning rate for parameter updates
+    initial_perturb_size = 0.2  # Usually smaller in NES
+    learning_rate = 0.05        # Learning rate for parameter updates
     perturb_decay = 0.995       # Slower decay for more stable convergence
     
     # Track model performance over time
