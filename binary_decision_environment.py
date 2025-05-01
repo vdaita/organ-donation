@@ -199,6 +199,7 @@ class BinaryDecisionEnvironment(gym.Env):
         features[6] = 1.0 if (self.departure_times[b] - current_timestep) <= 1 else 0.0 # patient
         features[7] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
         features[8] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
+
         return features
     # def _edge_to_feature(self, edge, current_timestep=None):
     #     if current_timestep is None:

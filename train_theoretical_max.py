@@ -9,14 +9,14 @@ import numpy as np
 from aim import Run
 
 model = nn.Sequential(
-    nn.Linear(12, 128),
-    nn.LayerNorm(128),
+    nn.Linear(9, 16),
+    nn.LayerNorm(16),
     nn.ReLU(),
     nn.Dropout(0.2),
-    nn.Linear(128, 128),
-    nn.LayerNorm(128),
+    nn.Linear(16, 8),
+    nn.LayerNorm(8),
     nn.ReLU(),
-    nn.Linear(128, 1),
+    nn.Linear(8, 1),
     nn.Sigmoid()
 )
 # randomly initialize the model
