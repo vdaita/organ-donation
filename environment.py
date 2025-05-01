@@ -29,7 +29,7 @@ class PairedKidneyDonationEnv(gym.Env):
             "total_timesteps": Discrete(n_timesteps + 1)  # +1 because it includes n_timesteps
         })
         # Change action space from nodes to edges (adjacency matrix)
-        self.action_space = MultiBinary((n_agents, n_agents))
+        self.action_space = Box(low=-1, high=1, shape=(n_agents, n_agents))
         self.seed = seed
         self.greedy_comp_mode = greedy_comp_mode 
         if seed >= 0:
@@ -65,6 +65,9 @@ class PairedKidneyDonationEnv(gym.Env):
         self.compatibility[np.ix_(hard_indices, hard_indices)] = 0  # Hard-to-Hard
         self.compatibility[np.arange(self.n_agents), np.arange(self.n_agents)] = 0 # no self-compatibility
 
+        # compatibility matrix should be symmetric now
+        self.compatibility = ((self.compatibility == 1) & (self.compatibility.T == 1)).astype(int) # old code can largely remain, but it is removable
+
         # Generate arrivals using exponential distribution
         self.arrival_times = np.zeros(self.n_agents, dtype=int)
         inter_arrival_times = self.np_random.exponential(1.0/self.arrival_rate, self.n_agents)
@@ -90,7 +93,7 @@ class PairedKidneyDonationEnv(gym.Env):
             print("Departure times: ", self.real_departure_times)
 
         self.current_step = 1 # fix to make sure that we have the first few elements
-        self.current_graph = nx.DiGraph()
+        self.current_graph = nx.Graph()
         for i in range(self.n_agents):
             self.current_graph.add_node(i)
         return self.get_observation(), self.get_info()
@@ -112,9 +115,7 @@ class PairedKidneyDonationEnv(gym.Env):
     def clear_node_edges(self, node):
         """Clear all edges connected to a specific node without removing the node."""
         if self.current_graph.has_node(node):
-            # Get all edges connected to this node (both incoming and outgoing)
-            edges_to_remove = list(self.current_graph.in_edges(node)) + list(self.current_graph.out_edges(node))
-            # Remove all these edges at once
+            edges_to_remove = list(self.current_graph.edges(node))
             self.current_graph.remove_edges_from(edges_to_remove)
 
     def node_matched(self, u):
@@ -125,43 +126,32 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def step(self, action, is_greedy=False):
         previous_matched = np.copy(self.matched_agents)
-        # Convert the action matrix to binary (0 or 1)
-        action = (action >= 0.5)
-        
-        # Get current adjacency matrix and active agents
         adj_matrix = nx.adjacency_matrix(self.current_graph).toarray()
-        
-        # Only select edges where both nodes are active and there is an actual edge
+        # make sure that each value is valid, only
         valid_edges = adj_matrix * np.outer(self.active_agents, self.active_agents)
-        
-        # Apply action to select only edges that are both valid and selected
         selected_edges = valid_edges * action
         
         if np.sum(selected_edges) > 0:
-            # Create a subgraph with only the selected edges
-            selected_subgraph = nx.DiGraph()
-            edge_indices = np.where(selected_edges == 1)
-            
-            for i in range(len(edge_indices[0])):
-                u, v = edge_indices[0][i], edge_indices[1][i]
-                selected_subgraph.add_edge(u, v)
-            
-            # Convert to undirected graph for matching, keeping only mutual edges
-            undirected_subgraph = nx.Graph()
-            for u, v in selected_subgraph.edges():
-                if selected_subgraph.has_edge(v, u):
-                    undirected_subgraph.add_edge(u, v)
-            
-            if self.use_cycles:
-                cycles = self.get_greedy_selected_cycles()
-                for cycle in cycles:
-                    for node in cycle:
-                        self.node_matched(node)
-            else:
-                best_matching = nx.max_weight_matching(undirected_subgraph, maxcardinality=True)
+            if is_greedy:
+                if self.use_cycles:
+                    raise NotImplementedError("Greedy cycles not implemented anymore")
+                best_matching = nx.max_weight_matching(self.current_graph, maxcardinality=True)
                 for u, v in best_matching:
                     self.node_matched(u)
                     self.node_matched(v)
+            else:
+                # currently, only consider one edge at a time, in order
+                # interesting locations
+                rows, cols = np.where(selected_edges > 0)
+                if len(rows) > 0:
+                    edge_weights = selected_edges[rows, cols]
+                    edges = np.column_stack((edge_weights, rows, cols))
+                    edges = edges[edges[:, 0].argsort()[::-1]]
+                    for _, u, v in edges:
+                        u, v = int(u), int(v)
+                        if self.active_agents[u] == 1 and self.active_agents[v] == 1 and self.current_graph.has_edge(u, v):
+                            self.node_matched(u)
+                            self.node_matched(v)
 
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
@@ -186,24 +176,13 @@ class PairedKidneyDonationEnv(gym.Env):
         self.current_step += 1
         done = self.current_step == self.n_timesteps
 
-        if self.greedy_comp_mode:
-            reward = 0
-            if done:
-                if not is_greedy:
-                    model_pct = np.sum(self.matched_agents) / self.n_agents
-                    # print("Model percentage: ", model_pct)
+        unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
+        reward = (-unmatched_departures) * (0.5)
+        matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
 
-                    greedy_pct = self.get_greedy_percentage()
-                    reward = model_pct / greedy_pct
-                    # print("Reward: ", reward)
-        else:
-            unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-            reward = (-unmatched_departures) * (0.5)
-            matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
-
-            hard_matched_now = np.sum((self.matched_agents - previous_matched) * self.is_hard_to_match) / max(1, np.sum(self.is_hard_to_match))
-            regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
-            reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
+        hard_matched_now = np.sum((self.matched_agents - previous_matched) * self.is_hard_to_match) / max(1, np.sum(self.is_hard_to_match))
+        regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
+        reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
         # reward = matched_now
         # if done:
         #     if not is_greedy:

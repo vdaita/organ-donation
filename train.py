@@ -12,6 +12,7 @@ import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
 from torch.distributions.bernoulli import Bernoulli
+from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 from model import PairedKidneyCriticModel, PairedKidneyModel
 from environment import PairedKidneyDonationEnv
@@ -112,13 +113,14 @@ class Agent(nn.Module):
             probs = probs.unsqueeze(0)
             
         # Create Bernoulli distribution for each edge
-        dist = Bernoulli(probs=probs)
+        std = 0.2
+        dist = Normal(probs, std)
         
         if action is None:
             action = dist.sample()
-        
-        action = action.float()
-        
+
+        action = torch.clamp(action, -0.999, 0.999)
+            
         # Calculate log probabilities for the entire matrix
         log_prob = dist.log_prob(action)
         

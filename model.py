@@ -159,8 +159,8 @@ class PairedKidneyModel(nn.Module):
             edge_features = torch.cat([x_i_expanded, x_j_expanded], dim=-1)
             
             scores = self.edge_score(edge_features).squeeze(-1)
-            
-            probs = torch.sigmoid(scores) * adj_matrix[b]
+
+            probs = torch.tanh(scores) * adj_matrix[b] # tanh rather than sigmoid makes values range from -1 to 1
             
             active_mask = torch.outer(active_agents[b], active_agents[b])
             probs = probs * active_mask

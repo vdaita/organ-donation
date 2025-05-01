@@ -85,32 +85,43 @@ def step(model: nn.Module, n_perturb: int, perturb_size: float, n_runs: int, poo
     # Print raw scores for debugging
     print(f"Raw fitness scores: {fitness_scores}")
     
-    # Proper fitness shaping for NES - using rank-based normalization
-    # NES typically uses fitness ranking rather than raw score normalization
-    sorted_indices = torch.argsort(fitness_scores)
-    ranked_weights = torch.zeros_like(fitness_scores)
+    # Check if all scores are identical or almost identical
+    score_range = fitness_scores.max() - fitness_scores.min()
+    scores_are_identical = score_range < 1e-6
     
-    # Apply rank-based weights - linear weighting
-    for i, idx in enumerate(sorted_indices):
-        ranked_weights[idx] = i / (n_perturb)
-    
-    # Center the weights
-    ranked_weights = ranked_weights - torch.mean(ranked_weights)
-    
-    # Scale weights for numerical stability
-    if torch.std(ranked_weights) > 1e-6:
-        ranked_weights = ranked_weights / torch.std(ranked_weights)
-    
-    print(f"Ranked weights: {ranked_weights}")
-    
-    # Compute the gradient approximation using NES formula
-    # Skip the first perturbation (unperturbed model) in the gradient estimation
-    gradient = torch.zeros_like(parameters)
-    for i in range(1, n_perturb + 1):
-        gradient += ranked_weights[i] * perturbations[i]
-    
-    # Scale gradient by number of perturbations and perturbation size
-    gradient = gradient / (n_perturb * perturb_size)
+    if scores_are_identical:
+        print("WARNING: All fitness scores are identical - using random gradient!")
+        # If all scores are the same, use random perturbations for gradient
+        # This ensures exploration continues even when scores don't differentiate
+        gradient = torch.randn_like(parameters)
+        gradient = gradient / gradient.norm() * perturb_size
+    else:
+        # Proper fitness shaping for NES - using rank-based normalization
+        # NES typically uses fitness ranking rather than raw score normalization
+        sorted_indices = torch.argsort(fitness_scores)
+        ranked_weights = torch.zeros_like(fitness_scores)
+        
+        # Apply rank-based weights - linear weighting
+        for i, idx in enumerate(sorted_indices):
+            ranked_weights[idx] = i / (n_perturb)
+        
+        # Center the weights
+        ranked_weights = ranked_weights - torch.mean(ranked_weights)
+        
+        # Scale weights for numerical stability
+        if torch.std(ranked_weights) > 1e-6:
+            ranked_weights = ranked_weights / torch.std(ranked_weights)
+        
+        print(f"Ranked weights: {ranked_weights}")
+        
+        # Compute the gradient approximation using NES formula
+        # Skip the first perturbation (unperturbed model) in the gradient estimation
+        gradient = torch.zeros_like(parameters)
+        for i in range(1, n_perturb + 1):
+            gradient += ranked_weights[i] * perturbations[i]
+        
+        # Scale gradient by number of perturbations and perturbation size
+        gradient = gradient / (n_perturb * perturb_size)
     
     # Update parameters using the estimated gradient
     parameters += learning_rate * gradient
@@ -118,8 +129,8 @@ def step(model: nn.Module, n_perturb: int, perturb_size: float, n_runs: int, poo
     # Apply the updated parameters to the model
     nn.utils.vector_to_parameters(parameters, model.parameters())
     
-    # Return the updated model
-    return model
+    # Return the updated model, the score of the unperturbed model, and whether scores were identical
+    return model, fitness_scores[0].item(), scores_are_identical
 
 def save_model(model, score, epoch=None, is_best=False, is_final=False, save_dir=None):
     """Save model checkpoint with minimal but essential metadata.
@@ -179,7 +190,7 @@ if __name__ == "__main__":
     print(f"Initial parameter norm: {parameters.norm().item():.4f}")
 
     # Training hyperparameters
-    epochs = 50
+    epochs = 250
     n_perturbations = mp.cpu_count() * 2
     if n_perturbations % 2 != 0: 
         n_perturbations += 1  # Ensure even number for antithetic sampling
@@ -190,6 +201,19 @@ if __name__ == "__main__":
     initial_perturb_size = 0.2  # Usually smaller in NES
     learning_rate = 0.05        # Learning rate for parameter updates
     perturb_decay = 0.995       # Slower decay for more stable convergence
+    
+    # Parameters for adaptive perturbation size
+    stagnation_window = 10  # Number of epochs to consider for stagnation detection
+    stagnation_threshold = 0.02  # Minimum relative improvement to not be considered stagnant
+    perturb_increase_factor = 1.5  # How much to increase perturbation when stagnant
+    min_perturb_size = 0.05  # Minimum perturbation size
+    max_perturb_size = 0.5   # Maximum perturbation size
+    
+    # Early exploration parameters
+    early_stage_epochs = 20  # Number of epochs considered "early"
+    identical_scores_count = 0  # Count of consecutive episodes with identical scores
+    identical_scores_threshold = 3  # How many consecutive identical episodes before increasing perturbation
+    early_stage_perturb_factor = 2.0  # How much to increase perturbation during early stages
     
     # Track model performance over time
     model_scores = []
@@ -213,7 +237,7 @@ if __name__ == "__main__":
             
             # Train model for one epoch using NES
             print(f"\nEpoch {epoch+1}/{epochs}")
-            model = step(
+            model, unperturbed_score, scores_identical = step(
                 model, 
                 n_perturb=n_perturbations, 
                 perturb_size=perturb_size, 
@@ -222,13 +246,20 @@ if __name__ == "__main__":
                 learning_rate=learning_rate
             )
             
+            # Update identical scores counter
+            if scores_identical:
+                identical_scores_count += 1
+                print(f"Identical scores detected ({identical_scores_count} consecutive episodes)")
+            else:
+                identical_scores_count = 0
+            
             # Evaluate model after training step
             if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
                 # More thorough evaluation at milestones
                 epoch_score = evaluate_model_main(model, n_runs=n_eval_runs * 2)
             else:
-                # Quick evaluation every epoch
-                epoch_score = evaluate_model_main(model, n_runs=n_eval_runs)
+                # Use the score from the unperturbed model evaluation during step
+                epoch_score = unperturbed_score
                 
             model_scores.append(epoch_score)
             print(f"Epoch {epoch+1} score: {epoch_score:.4f}")
@@ -241,11 +272,43 @@ if __name__ == "__main__":
             if (epoch + 1) % 10 == 0:  # Save checkpoint every 10 epochs
                 save_model(model, epoch_score, epoch, save_dir=save_dir)
             
-            # Decay perturbation size
-            perturb_size *= perturb_decay
+            # Adaptive perturbation size adjustment
+            # Case 1: Early stage - focus on exploration
+            if epoch < early_stage_epochs:
+                # In early stages, maintain higher perturbation
+                # But still allow some decay to prevent extreme exploration
+                old_perturb_size = perturb_size
+                perturb_size = max(perturb_size * 0.99, initial_perturb_size * 0.8)
+                
+                # If scores are identical for several consecutive episodes, boost exploration
+                if identical_scores_count >= identical_scores_threshold:
+                    perturb_size = min(perturb_size * early_stage_perturb_factor, max_perturb_size)
+                    print(f"Early stage with identical scores - boosting perturbation to {perturb_size:.4f}")
+                    identical_scores_count = 0  # Reset counter after boosting
+                
+            # Case 2: After early stage - check for stagnation
+            elif epoch >= stagnation_window:
+                # Calculate relative improvement over the stagnation window
+                window_start_score = model_scores[epoch - stagnation_window]
+                current_score = model_scores[epoch]
+                relative_improvement = (current_score - window_start_score) / abs(window_start_score + 1e-8)
+                
+                # If performance is stagnating or scores are identical for multiple episodes, increase perturbation
+                if relative_improvement < stagnation_threshold or identical_scores_count >= identical_scores_threshold:
+                    old_perturb_size = perturb_size
+                    perturb_size = min(perturb_size * perturb_increase_factor, max_perturb_size)
+                    print(f"Performance stagnating! Increasing perturbation size from {old_perturb_size:.4f} to {perturb_size:.4f}")
+                    identical_scores_count = 0  # Reset counter after boosting
+                else:
+                    # If not stagnating, continue with normal decay
+                    perturb_size = max(perturb_size * perturb_decay, min_perturb_size)
+            else:
+                # Standard decay for transition period
+                perturb_size *= perturb_decay
+                
             epoch_end_time = time.time()
             print(f"Epoch {epoch + 1}/{epochs} completed in {epoch_end_time - epoch_start_time:.2f}s")
-            print(f"New perturbation size: {perturb_size:.4f}")
+            print(f"Current perturbation size: {perturb_size:.4f}")
 
     finally:
         pool.close()
