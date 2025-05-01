@@ -9,17 +9,12 @@ num_input_features = 9
 num_envs = 8
 lr = 0.1
 
-# binary_decision_model = nn.Sequential(
-#     nn.Linear(num_input_features, 16),
-#     nn.ReLU(),
-#     nn.Linear(16, 8),
-#     nn.ReLU(),
-#     nn.Linear(8, 1),
-#     nn.Sigmoid()
-# )
-
 binary_decision_model = nn.Sequential(
-    nn.Linear(num_input_features, 1),
+    nn.Linear(num_input_features, 16),
+    nn.ReLU(),
+    nn.Linear(16, 8),
+    nn.ReLU(),
+    nn.Linear(8, 1),
     nn.Sigmoid()
 )
 
@@ -35,11 +30,11 @@ def update_model(model, parameter_changes, rewards):
     parameters = nn.utils.parameters_to_vector(model.parameters())
 
     rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
-    print("New rewards: ", rewards)
+    # print("New rewards: ", rewards)
     
     positive_indices = rewards > 0
     # print("Positive indices:", positive_indices)
-    print("Parameter changes shape:", parameter_changes.shape)
+    # print("Parameter changes shape:", parameter_changes.shape)
     
     parameter_changes = parameter_changes[positive_indices]
     rewards = rewards[positive_indices]
@@ -82,7 +77,7 @@ if __name__ == "__main__":
     change_size = change_size.unsqueeze(1)
     
     for epoch in tqdm(range(epochs)):
-        seeds = [int(s) for s in np.random.randint(0, 2 ** 32 - 1, size=16)]
+        seeds = [int(s) for s in np.random.randint(0, 2 ** 32 - 1, size=8)]
         parameter_changes = torch.randn(population_size, num_parameters)
         parameter_changes = parameter_changes * change_size
         new_population = parameter_changes + parameters
