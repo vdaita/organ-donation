@@ -95,10 +95,11 @@ if __name__ == "__main__":
 
     epochs = 50
     n_perturbations = mp.cpu_count() * 2
+    print(f"Total number of perturbations: {n_perturbations}")
     if n_perturbations % 2 != 0: n_perturbations -= 1
     n_eval_runs = 2
     n_final_eval_runs = 16
-    initial_perturb_size = 0.1
+    initial_perturb_size = 0.4
     learning_rate = 0.01
     perturb_decay = 0.99
 
