@@ -3,254 +3,130 @@ import torch
 from torch import nn
 from environment import PairedKidneyDonationEnv
 import numpy as np
-from reinforce import convert_obs_to_tensors
-from model import PairedKidneyModel
+from reinforce import PKEModel, convert_obs_to_tensors
 from typing import List
 from tqdm import tqdm
 import torch.multiprocessing as mp
-from torch_geometric.nn import GATConv
-from torch_geometric.utils import dense_to_sparse
-import torch.nn.functional as F
-import gymnasium as gym
-import copy
-import concurrent.futures
+from functools import partial
+import time
 
-class SimpleBatchedPKEModel(nn.Module):
-    def __init__(self, node_input_feature_dim=12, hidden_dim=32, num_heads=4):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.num_heads = num_heads
-        assert hidden_dim % num_heads == 0, "hidden_dim must be divisible by num_heads"
+# Define model architecture globally for worker processes
+HIDDEN_DIM = 32
+N_AGENTS = 100
+N_TIMESTEPS = 32
+DEATH_RANGE = [8, 12]
 
-        self.node_proj = nn.Linear(node_input_feature_dim, hidden_dim)
-        self.gnn = GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, concat=True)
-        self.edge_mlp = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
-        )
+# Helper function for evaluation in worker processes
+def evaluate_params(param_vector: torch.Tensor, n_runs: int) -> float:
+    local_model = PKEModel(hidden_dim=HIDDEN_DIM)
+    nn.utils.vector_to_parameters(param_vector, local_model.parameters())
+    local_model.eval()
 
-    def forward(self, x, adj):
-        """
-        x:   [B, N, D]
-        adj: [B, N, N]
-        Output: [B, N, N]
-        """
-        batch_size, num_nodes, feat_dim = x.shape
-        device = x.device
-        output = torch.zeros(batch_size, num_nodes, num_nodes, device=device)
-
-        for b in range(batch_size):
-            xb = x[b]
-            adjb = adj[b]
-            hb = F.relu(self.node_proj(xb))
-
-            edge_index_b = dense_to_sparse(adjb)[0]
-            if edge_index_b.size(1) == 0:
-                h_gnn = hb
-            else:
-                h_gnn = self.gnn(hb, edge_index_b)
-
-            for i in range(num_nodes):
-                for j in range(num_nodes):
-                    if i != j and adjb[i, j]:
-                        edge_feat = torch.cat([h_gnn[i], h_gnn[j]], dim=-1)
-                        score = self.edge_mlp(edge_feat)
-                        output[b, i, j] = score
-
-        return output
-
-def convert_batched_obs_to_list(obs, n_envs):
-    observations = []
-    for env in range(n_envs):
-        obs_dict = {}
-        for key in obs.keys():
-            obs_dict[key] = obs[key][env]
-        observations.append(obs_dict)
-    return observations
-
-def convert_batched_obs_to_tensor(obs, n_envs, n_timesteps):
-    obs = convert_batched_obs_to_list(obs, n_envs)
-    obs_tuples = [convert_obs_to_tensors(obs_dict, n_timesteps) for obs_dict in obs]
-    agent_vecs, edge_index = zip(*obs_tuples)
-    agent_vecs = torch.stack(agent_vecs)
-    edge_index = torch.stack(edge_index)
-    return agent_vecs, edge_index
-
-def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=8) -> List[float]:
-    n_agents = 150
-    n_timesteps = 16
-    death_range = [4, 8]
-    easy_match_rate = 0.087
-    hard_match_rate = 0.037
-
-    def generate_env(seed=None):
-        return PairedKidneyDonationEnv(
-            n_agents=n_agents,
-            n_timesteps=n_timesteps,
-            death_range=death_range,
-            seed=seed,
-            p=easy_match_rate,
-            q=hard_match_rate,
-            greedy_comp_mode=True
-        )
-
-    seeds = np.random.randint(0, 10000, n_runs)
-
-    # Prepare model clones for each parameter set
-    models = []
-    for param_vec in parameters:
-        model = copy.deepcopy(model_arch)
-        nn.utils.vector_to_parameters(param_vec, model.parameters())
-        model.eval()
-        models.append(model)
-
-    rewards = []
-
-    for model_index, model in tqdm(enumerate(models)):
-        envs = [lambda: generate_env(seed=int(seed)) for seed in seeds]
-        env = gym.vector.SyncVectorEnv(envs)
+    env = PairedKidneyDonationEnv(
+        n_agents=N_AGENTS,
+        n_timesteps=N_TIMESTEPS,
+        death_range=DEATH_RANGE
+    )
+    total_score = 0
+    for _ in range(n_runs):
         obs, _ = env.reset()
         done = False
-        total_reward = np.zeros(n_runs)
         while not done:
-            agent_vecs, edge_index = convert_batched_obs_to_tensor(obs, n_runs, n_timesteps)
             with torch.no_grad():
-                action = model(agent_vecs, edge_index)
-                action = action.cpu().numpy()
-            obs, reward, terminated, truncated, _ = env.step(action)
-            done = all(terminated) or all(truncated)
-            total_reward += reward
-        rewards.append(np.sum(total_reward) / n_runs)
-        print("Model index: ", model_index, "Reward: ", rewards[-1])
+                agent_vecs, edge_index = convert_obs_to_tensors(obs, env.n_timesteps)
+                action = local_model(agent_vecs, edge_index)
+                action = action.detach().cpu().numpy()
+            obs, reward, done, _, _ = env.step(action)
+        greedy_score = env.get_greedy_percentage()
+        if greedy_score > 0:
+            total_score += (env.get_percentage()) / greedy_score
 
+    return total_score / n_runs
 
-    return rewards
+# Wrapper for evaluating the main model
+def evaluate_model_main(model: nn.Module, n_runs=8) -> float:
+    model.eval()
+    param_vector = nn.utils.parameters_to_vector(model.parameters()).detach()
+    total_score = 0
+    for _ in tqdm(range(n_runs)):
+        total_score += evaluate_params(param_vector, n_runs=1)
+    return total_score / n_runs
 
-model = SimpleBatchedPKEModel(hidden_dim=16)
-num_parameters = sum(p.numel() for p in model.parameters())
-print("Number of parameters: ", num_parameters)
+def step(model: nn.Module, n_perturb: int, perturb_size: float, n_runs: int, pool: mp.Pool, learning_rate: float) -> nn.Module:
+    parameters = nn.utils.parameters_to_vector(model.parameters()).detach()
+    num_params = parameters.shape[0]
+    perturbations = torch.zeros((n_perturb + 1, num_params))
+    scores = torch.zeros(n_perturb + 1)
 
-num_epochs = 40
-num_selected = 16
+    assert n_perturb % 2 == 0, "n_perturb must be even"
 
-# Kaiming initialization for parameters
+    for i in range(n_perturb // 2):
+        noise_vec = torch.randn(num_params) * perturb_size
+        perturbations[i * 2] = noise_vec
+        perturbations[i * 2 + 1] = -noise_vec
 
-parameters = torch.rand(num_selected, num_parameters) * 2 - 1
+    param_vectors_to_evaluate = [(parameters + noise_vec).detach() for noise_vec in perturbations]
+    eval_args = [(p_vec, n_runs) for p_vec in param_vectors_to_evaluate]
 
-best_k = 4
-num_children = (num_selected // best_k) - 1
+    print(f"Evaluating {n_perturb + 1} parameter sets across {pool._processes} workers...")
+    start_time = time.time()
+    results = list(tqdm(pool.starmap(evaluate_params, eval_args), total=len(eval_args)))
+    end_time = time.time()
+    print(f"Evaluation took {end_time - start_time:.2f} seconds.")
 
-thetas = np.linspace(0.1, 0.7, best_k)
-thetas = torch.tensor(thetas)
-thetas = thetas.unsqueeze(1)
+    scores = torch.tensor(results)
 
-alpha = 0.995
-
-num_runs = 10
-
-assert num_selected % best_k == 0, "num_selected must be divisible by best_k"
-
-# Mutation function
-def mutate_parameters(params, mutation_rate=0.1, mutation_scale=0.5):
-    mutated = params.clone()
-    mutation_mask = torch.rand_like(params) < mutation_rate
-    mutations = torch.randn_like(params) * mutation_scale
-    mutated[mutation_mask] += mutations[mutation_mask]
-    return mutated
-
-for epoch in tqdm(range(num_epochs)):
-    rewards = evaluate_parameters(model, parameters, n_runs=num_runs)
-
-    rewards_arr = np.array(rewards)
-    iqr = np.percentile(rewards_arr, 75) - np.percentile(rewards_arr, 25)
-    print(
-        "Rewards statistics: ",
-        "mean =", np.mean(rewards_arr),
-        "std =", np.std(rewards_arr),
-        "min =", np.min(rewards_arr),
-        "max =", np.max(rewards_arr),
-        "median =", np.median(rewards_arr),
-        "25th percentile =", np.percentile(rewards_arr, 25),
-        "75th percentile =", np.percentile(rewards_arr, 75),
-        "iqr =", iqr
-    )
-
-    best_indices = np.argsort(rewards)[-best_k:]
-    best_parameters = parameters[best_indices]
-    # Ensure best_parameters is a tensor, detaching if necessary from computation graph
-    if isinstance(best_parameters, np.ndarray):
-        best_parameters = torch.tensor(best_parameters, dtype=torch.float32)
+    if scores.std() > 1e-6:
+        normalized_scores = (scores - scores.mean()) / scores.std()
     else:
-        best_parameters = best_parameters.clone().detach().requires_grad_(False)
+        normalized_scores = torch.zeros_like(scores)
 
-    new_parameters = torch.zeros_like(parameters)
-    new_parameters[:best_k] = best_parameters
-    for child in range(num_children):
-        start = (child + 1) * best_k
-        end = min(start + best_k, num_selected)
+    update = (normalized_scores.unsqueeze(1) * perturbations).sum(dim=0)
+    parameters += learning_rate * update / (n_perturb * perturb_size)
 
-        if child % 3 == 0:
-            deltas = torch.rand_like(best_parameters) * thetas
-            new_parameters[start:end] = best_parameters + deltas
-        elif child % 3 == 1:
-            for i in range(start, end):
-                parent_idx = np.random.randint(0, best_k)
-                new_parameters[i] = mutate_parameters(
-                    best_parameters[parent_idx],
-                    mutation_rate=0.3,
-                    mutation_scale=1.0
-                )
-        else:
-            for i in range(start, end):
-                parent1_idx = np.random.randint(0, best_k)
-                parent2_idx = np.random.randint(0, best_k)
-                while parent2_idx == parent1_idx:
-                    parent2_idx = np.random.randint(0, best_k)
+    nn.utils.vector_to_parameters(parameters, model.parameters())
+    return model
 
-                crossover_point = np.random.randint(0, num_parameters)
-                child_params = torch.zeros_like(best_parameters[0])
-                child_params[:crossover_point] = best_parameters[parent1_idx, :crossover_point]
-                child_params[crossover_point:] = best_parameters[parent2_idx, crossover_point:]
-                new_parameters[i] = mutate_parameters(
-                    child_params,
-                    mutation_rate=0.1,
-                    mutation_scale=0.2
-                )
+if __name__ == "__main__":
+    model = PKEModel(hidden_dim=HIDDEN_DIM)
+    model.reset_parameters()
 
-    # Random replacement every epoch
-    replace_count = num_selected // 4
-    replace_indices = np.random.choice(
-        range(best_k, num_selected),
-        replace_count,
-        replace=False
-    )
-    for idx in replace_indices:
-        if np.random.random() < 0.5:
-            # Re-initialize using Kaiming for consistency
-            temp_model = SimpleBatchedPKEModel(hidden_dim=16)
-            for name, param in temp_model.named_parameters():
-                if 'weight' in name and param.dim() > 1:
-                    nn.init.kaiming_normal_(param, nonlinearity='relu')
-                elif 'bias' in name:
-                    nn.init.zeros_(param)
-            new_parameters[idx] = nn.utils.parameters_to_vector(temp_model.parameters()).detach()
-        else:
-            # Sparse random initialization
-            params = torch.zeros(num_parameters)
-            mask = torch.rand(num_parameters) < 0.1
-            params[mask] = torch.randn(mask.sum()) * 3.0
-            new_parameters[idx] = params
+    print(f"Total number of parameters in the model: {sum(p.numel() for p in model.parameters())}")
 
-    thetas = thetas * alpha
-    parameters = new_parameters
-print("Number of of parameters: ", num_parameters)
+    epochs = 50
+    n_perturbations = mp.cpu_count() * 2
+    if n_perturbations % 2 != 0: n_perturbations -= 1
+    n_eval_runs = 2
+    n_final_eval_runs = 16
+    initial_perturb_size = 0.1
+    learning_rate = 0.01
+    perturb_decay = 0.99
 
-# Save the best model parameters
-best_idx = np.argmax(rewards)
-best_param_vec = parameters[best_idx]
-best_model = copy.deepcopy(model)
-nn.utils.vector_to_parameters(best_param_vec, best_model.parameters())
-torch.save(best_model.state_dict(), "best_pke_model.pth")
-print("Best model saved to best_pke_model.pth")
+    parameters = nn.utils.parameters_to_vector(model.parameters())
+    print("Initial Parameter norm: ", parameters.norm().item())
+
+    perturb_size = initial_perturb_size
+
+    num_workers = mp.cpu_count()
+    print(f"Using {num_workers} worker processes.")
+    pool = mp.Pool(processes=num_workers)
+
+    try:
+        for epoch in range(epochs):
+            epoch_start_time = time.time()
+            model = step(model, n_perturb=n_perturbations, perturb_size=perturb_size, n_runs=n_eval_runs, pool=pool, learning_rate=learning_rate)
+            perturb_size *= perturb_decay
+            epoch_end_time = time.time()
+            print(f"Epoch {epoch + 1}/{epochs} completed in {epoch_end_time - epoch_start_time:.2f}s, New Perturbation size: {perturb_size:.4f}")
+
+            if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
+                current_score = evaluate_model_main(model, n_runs=n_final_eval_runs // 2)
+                print(f"Intermediate evaluation score: {current_score:.4f}")
+
+    finally:
+        pool.close()
+        pool.join()
+
+    print("Training finished.")
+    final_score = evaluate_model_main(model, n_runs=n_final_eval_runs)
+    print(f"Final Model score after {epochs} epochs: {final_score:.4f}")
