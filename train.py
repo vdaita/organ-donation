@@ -128,17 +128,17 @@ class Agent(nn.Module):
         # Handle adjacency matrix extraction properly
         if isinstance(x, dict):
             # Single observation or dictionary of batched observations
-            if isinstance(x["adjacency_matrix"], list):
-                # Handle batched observations in dictionary format
-                adj_matrix = torch.tensor(np.array(x["adjacency_matrix"])).to(device)
+            if isinstance(x["adjacency"], list):
+                # Handle batched  in dictionary format
+                adj_matrix = torch.tensor(np.array(x["adjacency"])).to(device)
             else:
                 # Handle single observation
-                adj_matrix = torch.tensor(x["adjacency_matrix"]).to(device)
+                adj_matrix = torch.tensor(x["adjacency"]).to(device)
                 if len(adj_matrix.shape) == 2:
                     adj_matrix = adj_matrix.unsqueeze(0)
         else:
             # List of observation dictionaries
-            adj_matrix = torch.stack([torch.tensor(obs["adjacency_matrix"]).to(device) for obs in x])
+            adj_matrix = torch.stack([torch.tensor(obs["adjacency"]).to(device) for obs in x])
         
         # Make sure adjacency matrix has same shape as log_prob
         if adj_matrix.shape != log_prob.shape:

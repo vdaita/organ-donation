@@ -11,11 +11,11 @@ def get_feature_tensor(obs):
     if isinstance(obs, list):
         obs = {k: [d[k] for d in obs] for k in obs[0].keys()}
 
-    adj_matrix = torch.tensor(obs["adjacency_matrix"])        
+    adj_matrix = torch.tensor(obs["adjacency"])        
     arrival = torch.tensor(obs["arrivals"])
     departure = torch.tensor(obs["departures"])
-    is_hard_to_match = torch.tensor(obs["is_hard_to_match"])
-    active_agents = torch.tensor(obs["active_agents"])
+    is_hard_to_match = torch.tensor(obs["is_hard"])
+    active_agents = torch.tensor(obs["active"])
     timestep = torch.tensor(obs["timestep"])
     total_timesteps = torch.tensor(obs["total_timesteps"])
 
@@ -138,10 +138,10 @@ class PairedKidneyModel(nn.Module):
         
         # Handle adjacency matrix extraction properly
         if isinstance(obs, dict):
-            adj_matrix = torch.tensor(obs["adjacency_matrix"]).to(x.device)
+            adj_matrix = torch.tensor(obs["adjacency"]).to(x.device)
         else:
             # Handle case where obs is a list of dictionaries
-            adj_matrix = torch.stack([torch.tensor(o["adjacency_matrix"]) for o in obs]).to(x.device)
+            adj_matrix = torch.stack([torch.tensor(o["adjacency"]) for o in obs]).to(x.device)
             
         if len(adj_matrix.shape) == 2:
             adj_matrix = adj_matrix.unsqueeze(0)

@@ -79,9 +79,9 @@ def convert_batched_obs_to_tensor(obs, n_envs, n_timesteps):
     return agent_vecs, edge_index
 
 def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=8) -> List[float]:
-    n_agents = 100
-    n_timesteps = 32
-    death_range = [14, 18]
+    n_agents = 50
+    n_timesteps = 16
+    death_range = [10, 14]
 
     def generate_env(seed=None):
         return PairedKidneyDonationEnv(
@@ -124,10 +124,10 @@ def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=
 model = SimpleBatchedPKEModel(hidden_dim=16)
 num_parameters = sum(p.numel() for p in model.parameters())
 
-num_epochs = 25
-num_selected = 16
+num_epochs = 40
+num_selected = 8
 parameters = torch.randn(num_selected, num_parameters)
-best_k = 4
+best_k = 2
 num_children = (num_selected // best_k) - 1
 
 thetas = np.linspace(0.1, 0.7, best_k)

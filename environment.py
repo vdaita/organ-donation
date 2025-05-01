@@ -31,7 +31,10 @@ class PairedKidneyDonationEnv(gym.Env):
         # Change action space from nodes to edges (adjacency matrix)
         self.action_space = MultiBinary((n_agents, n_agents))
         self.seed = seed
-        self.reset(seed=seed)
+        if seed >= 0:
+            self.reset(seed=seed)
+        else:
+            self.reset()
 
         
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -183,13 +186,13 @@ class PairedKidneyDonationEnv(gym.Env):
         done = self.current_step == self.n_timesteps
 
         unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-        # reward = (-unmatched_departures) * (0.5)
+        reward = (-unmatched_departures) * (0.5)
         matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
 
         hard_matched_now = np.sum((self.matched_agents - previous_matched) * self.is_hard_to_match) / max(1, np.sum(self.is_hard_to_match))
         regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
-        # reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
-        reward = matched_now
+        reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
+        # reward = matched_now
         # if done:
         #     if not is_greedy:
         #         _, greedy_pct = self.get_greedy_percentage()
@@ -200,6 +203,13 @@ class PairedKidneyDonationEnv(gym.Env):
 
         # if not is_greedy:
         #     reward += self.greedy_future(action) * 0.5 # maximize the future reward
+
+        # reward = 0
+        # if done:
+        #     if not is_greedy:
+        #         my_reward = np.sum(self.matched_agents) / self.n_agents
+        #         greedy_reward = self.get_greedy_percentage()
+        #         reward = my_reward / greedy_reward
 
         return self.get_observation(), reward, done, done, self.get_info()
     
