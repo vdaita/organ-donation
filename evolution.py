@@ -79,11 +79,11 @@ def convert_batched_obs_to_tensor(obs, n_envs, n_timesteps):
     return agent_vecs, edge_index
 
 def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=8) -> List[float]:
-    n_agents = 50
+    n_agents = 150
     n_timesteps = 16
-    death_range = [10, 14]
-    easy_match_rate = 0.087 * 2
-    hard_match_rate = 0.037 * 2
+    death_range = [4, 8]
+    easy_match_rate = 0.087
+    hard_match_rate = 0.037
 
     def generate_env(seed=None):
         return PairedKidneyDonationEnv(
@@ -123,6 +123,8 @@ def evaluate_parameters(model_arch: nn.Module, parameters: torch.Tensor, n_runs=
             done = all(terminated) or all(truncated)
             total_reward += reward
         rewards.append(np.sum(total_reward) / n_runs)
+        print("Model index: ", model_index, "Reward: ", rewards[-1])
+
 
     return rewards
 
@@ -131,8 +133,12 @@ num_parameters = sum(p.numel() for p in model.parameters())
 print("Number of parameters: ", num_parameters)
 
 num_epochs = 40
-num_selected = 32
-parameters = torch.randn(num_selected, num_parameters)
+num_selected = 16
+
+# Kaiming initialization for parameters
+
+parameters = torch.rand(num_selected, num_parameters) * 2 - 1
+
 best_k = 4
 num_children = (num_selected // best_k) - 1
 
@@ -145,6 +151,14 @@ alpha = 0.995
 num_runs = 10
 
 assert num_selected % best_k == 0, "num_selected must be divisible by best_k"
+
+# Mutation function
+def mutate_parameters(params, mutation_rate=0.1, mutation_scale=0.5):
+    mutated = params.clone()
+    mutation_mask = torch.rand_like(params) < mutation_rate
+    mutations = torch.randn_like(params) * mutation_scale
+    mutated[mutation_mask] += mutations[mutation_mask]
+    return mutated
 
 for epoch in tqdm(range(num_epochs)):
     rewards = evaluate_parameters(model, parameters, n_runs=num_runs)
@@ -163,18 +177,71 @@ for epoch in tqdm(range(num_epochs)):
         "iqr =", iqr
     )
 
-    # select the best k parameters
     best_indices = np.argsort(rewards)[-best_k:]
     best_parameters = parameters[best_indices]
-    best_parameters = torch.tensor(best_parameters)   
-        
+    # Ensure best_parameters is a tensor, detaching if necessary from computation graph
+    if isinstance(best_parameters, np.ndarray):
+        best_parameters = torch.tensor(best_parameters, dtype=torch.float32)
+    else:
+        best_parameters = best_parameters.clone().detach().requires_grad_(False)
+
     new_parameters = torch.zeros_like(parameters)
     new_parameters[:best_k] = best_parameters
     for child in range(num_children):
         start = (child + 1) * best_k
         end = min(start + best_k, num_selected)
-        deltas = torch.rand_like(best_parameters) * thetas 
-        new_parameters[start:end] = best_parameters + deltas
+
+        if child % 3 == 0:
+            deltas = torch.rand_like(best_parameters) * thetas
+            new_parameters[start:end] = best_parameters + deltas
+        elif child % 3 == 1:
+            for i in range(start, end):
+                parent_idx = np.random.randint(0, best_k)
+                new_parameters[i] = mutate_parameters(
+                    best_parameters[parent_idx],
+                    mutation_rate=0.3,
+                    mutation_scale=1.0
+                )
+        else:
+            for i in range(start, end):
+                parent1_idx = np.random.randint(0, best_k)
+                parent2_idx = np.random.randint(0, best_k)
+                while parent2_idx == parent1_idx:
+                    parent2_idx = np.random.randint(0, best_k)
+
+                crossover_point = np.random.randint(0, num_parameters)
+                child_params = torch.zeros_like(best_parameters[0])
+                child_params[:crossover_point] = best_parameters[parent1_idx, :crossover_point]
+                child_params[crossover_point:] = best_parameters[parent2_idx, crossover_point:]
+                new_parameters[i] = mutate_parameters(
+                    child_params,
+                    mutation_rate=0.1,
+                    mutation_scale=0.2
+                )
+
+    # Random replacement every epoch
+    replace_count = num_selected // 4
+    replace_indices = np.random.choice(
+        range(best_k, num_selected),
+        replace_count,
+        replace=False
+    )
+    for idx in replace_indices:
+        if np.random.random() < 0.5:
+            # Re-initialize using Kaiming for consistency
+            temp_model = SimpleBatchedPKEModel(hidden_dim=16)
+            for name, param in temp_model.named_parameters():
+                if 'weight' in name and param.dim() > 1:
+                    nn.init.kaiming_normal_(param, nonlinearity='relu')
+                elif 'bias' in name:
+                    nn.init.zeros_(param)
+            new_parameters[idx] = nn.utils.parameters_to_vector(temp_model.parameters()).detach()
+        else:
+            # Sparse random initialization
+            params = torch.zeros(num_parameters)
+            mask = torch.rand(num_parameters) < 0.1
+            params[mask] = torch.randn(mask.sum()) * 3.0
+            new_parameters[idx] = params
 
     thetas = thetas * alpha
     parameters = new_parameters

@@ -165,7 +165,7 @@ class Agent(nn.Module):
 
         for i in range(num_runs):
             env.reset()
-            greedy_reward, greedy_percentage = env.get_greedy_percentage()
+            greedy_percentage = env.get_greedy_percentage()
             greedy_percentages.append(greedy_percentage)
 
             obs, info = env.start_over()
