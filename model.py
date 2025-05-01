@@ -127,11 +127,19 @@ class PairedKidneyModel(nn.Module):
         
     def reset_parameters(self):
         self.backbone.reset_parameters()
-        nn.init.xavier_uniform_(self.edge_proj1.weight)
-        nn.init.xavier_uniform_(self.edge_proj2.weight)
-        nn.init.xavier_uniform_(self.edge_score.weight)
+        
+        torch.nn.init.xavier_uniform_(self.edge_proj1.weight)
+        if self.edge_proj1.bias is not None:
+            torch.nn.init.constant_(self.edge_proj1.bias, 0.5)
+            
+        torch.nn.init.xavier_uniform_(self.edge_proj2.weight)
+        if self.edge_proj2.bias is not None:
+            torch.nn.init.constant_(self.edge_proj2.bias, 0.5) 
+            
+        torch.nn.init.xavier_uniform_(self.edge_score.weight)
         if self.edge_score.bias is not None:
-            self.edge_score.bias.data.fill_(0.0)
+            torch.nn.init.constant_(self.edge_score.bias, 0.5) 
+
 
     def forward(self, obs):
         x, active_agents = self.backbone(obs)

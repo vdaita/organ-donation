@@ -65,9 +65,6 @@ class PairedKidneyDonationEnv(gym.Env):
         self.compatibility[np.ix_(hard_indices, hard_indices)] = 0  # Hard-to-Hard
         self.compatibility[np.arange(self.n_agents), np.arange(self.n_agents)] = 0 # no self-compatibility
 
-        # compatibility matrix should be symmetric now
-        self.compatibility = ((self.compatibility == 1) & (self.compatibility.T == 1)).astype(int) # old code can largely remain, but it is removable
-
         # Generate arrivals using exponential distribution
         self.arrival_times = np.zeros(self.n_agents, dtype=int)
         inter_arrival_times = self.np_random.exponential(1.0/self.arrival_rate, self.n_agents)
@@ -135,7 +132,12 @@ class PairedKidneyDonationEnv(gym.Env):
             if is_greedy:
                 if self.use_cycles:
                     raise NotImplementedError("Greedy cycles not implemented anymore")
-                best_matching = nx.max_weight_matching(self.current_graph, maxcardinality=True)
+                reg_graph = nx.Graph()
+                for u in range(self.n_agents):
+                    for v in range(self.n_agents):
+                        if selected_edges[u, v] > 0 and self.active_agents[u] == 1 and self.active_agents[v] == 1:
+                            reg_graph.add_edge(u, v)
+                best_matching = nx.max_weight_matching(reg_graph, maxcardinality=True)
                 for u, v in best_matching:
                     self.node_matched(u)
                     self.node_matched(v)
@@ -152,7 +154,6 @@ class PairedKidneyDonationEnv(gym.Env):
                         if self.active_agents[u] == 1 and self.active_agents[v] == 1 and self.current_graph.has_edge(u, v):
                             self.node_matched(u)
                             self.node_matched(v)
-
         # add the new arrivals to the graph 
         new_arrivals = np.where(self.arrival_times == self.current_step)[0]
 
@@ -306,7 +307,7 @@ class PairedKidneyDonationEnv(gym.Env):
         obs, info = self.start_over()
         reward, done = 0, False
         while not done:
-            action = self.active_agents
+            action = np.outer(self.active_agents, self.active_agents)
             obs, new_reward, done, _, info = self.step(action, is_greedy=True)
             reward += new_reward
         # print("Greedy percentage: ", sum(self.matched_agents) / self.n_agents)

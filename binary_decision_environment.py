@@ -40,7 +40,7 @@ class BinaryDecisionEnvironment(gym.Env):
         self.observation_space = Box(
             low=0,
             high=1,
-            shape=(22, ),
+            shape=(9, ),
             dtype=np.float32
         )
     
@@ -189,44 +189,59 @@ class BinaryDecisionEnvironment(gym.Env):
         if current_timestep is None:
             current_timestep = self.current_timestep
         a, b = edge
-        features = np.zeros(22,)
-        # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b]) 
-        features[0] = current_timestep / self.n_timesteps
-        features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
-        features[2] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
-        features[3] = self.is_hard[a]
-        features[4] = self.is_hard[b]
-        features[5] = current_timestep % (int(self.n_timesteps / 16))
-        features[6] = current_timestep % (int(self.n_timesteps / 8))
-        features[7] = current_timestep % (int(self.n_timesteps / 4))
-        features[8] = min(self.departure_times[a] - current_timestep, self. departure_times[b] - current_timestep) / self.n_timesteps
-
-        features[9] = 1.0 if (self.departure_times[a] - current_timestep) <= 2 else 0.0 
-        features[10] = 1.0 if (self.departure_times[b] - current_timestep) <= 2 else 0.0 
-        
-        # number of easy edges for a
-        if np.sum(self.active_agents) > 0:
-            features[11] = np.sum(self.compat[a, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
-            # number of easy edges for b
-            features[12] = np.sum(self.compat[b, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
-
-            # number of hard edges for a
-            features[13] = np.sum(self.compat[a, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
-            # number of hard edges for b
-            features[14] = np.sum(self.compat[b, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
-
-        # how large is the graph right now?
-        features[15] = np.sum(self.active_agents) / self.n_agents
-
-        # Interactions between features
-        features[16] = features[1] * features[3]  # Interaction between remaining time for a and hardness of a
-        features[17] = features[2] * features[4]  # Interaction between remaining time for b and hardness of b
-        features[18] = features[8] * features[15]  # Interaction between minimum remaining time and graph size
-        features[19] = features[11] * features[12]  # Interaction between easy edges for a and b
-        features[20] = features[13] * features[14]  # Interaction between hard edges for a and b
-        features[21] = features[9] * features[10]  # Interaction between urgency of a and b
-
+        features = np.zeros(9, )
+        features[0] = self.is_hard[a]
+        features[1] = self.is_hard[b]
+        features[2] = current_timestep % 2
+        features[3] = current_timestep % 3
+        features[4] = current_timestep % 5
+        features[5] = 1.0 if (self.departure_times[a] - current_timestep) <= 2 else 0.0 # patient 1
+        features[6] = 1.0 if (self.departure_times[b] - current_timestep) <= 2 else 0.0 # patient
+        features[7] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
+        features[8] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
         return features
+    # def _edge_to_feature(self, edge, current_timestep=None):
+    #     if current_timestep is None:
+    #         current_timestep = self.current_timestep
+    #     a, b = edge
+    #     features = np.zeros(22,)
+    #     # print("Edge: ", edge, "Current timestep: ", self.current_timestep, "Departure time a: ", self.departure_times[a], "Departure time b: ", self.departure_times[b], "Arrival time a: ", self.arrival_times[a], "Arrival time b: ", self.arrival_times[b]) 
+    #     features[0] = current_timestep / self.n_timesteps
+    #     features[1] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
+    #     features[2] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
+    #     features[3] = self.is_hard[a]
+    #     features[4] = self.is_hard[b]
+    #     features[5] = current_timestep % (int(self.n_timesteps / 16))
+    #     features[6] = current_timestep % (int(self.n_timesteps / 8))
+    #     features[7] = current_timestep % (int(self.n_timesteps / 4))
+    #     features[8] = min(self.departure_times[a] - current_timestep, self. departure_times[b] - current_timestep) / self.n_timesteps
+
+    #     features[9] = 1.0 if (self.departure_times[a] - current_timestep) <= 2 else 0.0 
+    #     features[10] = 1.0 if (self.departure_times[b] - current_timestep) <= 2 else 0.0 
+        
+    #     # number of easy edges for a
+    #     if np.sum(self.active_agents) > 0:
+    #         features[11] = np.sum(self.compat[a, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
+    #         # number of easy edges for b
+    #         features[12] = np.sum(self.compat[b, :] * self.active_agents * (1 - self.is_hard)) / np.sum(self.active_agents)
+
+    #         # number of hard edges for a
+    #         features[13] = np.sum(self.compat[a, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
+    #         # number of hard edges for b
+    #         features[14] = np.sum(self.compat[b, :] * self.active_agents * self.is_hard) / np.sum(self.active_agents)
+
+    #     # how large is the graph right now?
+    #     features[15] = np.sum(self.active_agents) / self.n_agents
+
+    #     # Interactions between features
+    #     features[16] = features[1] * features[3]  # Interaction between remaining time for a and hardness of a
+    #     features[17] = features[2] * features[4]  # Interaction between remaining time for b and hardness of b
+    #     features[18] = features[8] * features[15]  # Interaction between minimum remaining time and graph size
+    #     features[19] = features[11] * features[12]  # Interaction between easy edges for a and b
+    #     features[20] = features[13] * features[14]  # Interaction between hard edges for a and b
+    #     features[21] = features[9] * features[10]  # Interaction between urgency of a and b
+
+    #     return features
     
     def _get_reward(self):
         if self.current_timestep >= self.n_timesteps:
