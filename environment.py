@@ -8,7 +8,7 @@ import time
 import copy
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.087, q=0.037, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False):
+    def __init__(self, n_agents=1000, p=0.087, q=0.037, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False, seed=-1):
         self.n_agents = n_agents
 
         self.p = p
@@ -30,8 +30,8 @@ class PairedKidneyDonationEnv(gym.Env):
         })
         # Change action space from nodes to edges (adjacency matrix)
         self.action_space = MultiBinary((n_agents, n_agents))
-        self.seed = -1
-        self.reset()
+        self.seed = seed
+        self.reset(seed=seed)
 
         
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -183,13 +183,13 @@ class PairedKidneyDonationEnv(gym.Env):
         done = self.current_step == self.n_timesteps
 
         unmatched_departures = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
-        reward = (-unmatched_departures) * (0.5)
+        # reward = (-unmatched_departures) * (0.5)
         matched_now = np.sum(self.matched_agents - previous_matched) / self.n_agents
 
         hard_matched_now = np.sum((self.matched_agents - previous_matched) * self.is_hard_to_match) / max(1, np.sum(self.is_hard_to_match))
         regular_matched_now = np.sum((self.matched_agents - previous_matched) * (1 - self.is_hard_to_match)) / max(1, np.sum(1 - self.is_hard_to_match))
-        reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
-
+        # reward += (hard_matched_now * 2) + (regular_matched_now * 0.5)
+        reward = matched_now
         # if done:
         #     if not is_greedy:
         #         _, greedy_pct = self.get_greedy_percentage()
