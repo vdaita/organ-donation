@@ -200,6 +200,9 @@ class BinaryDecisionEnvironment(gym.Env):
         features[7] = (self.departure_times[a] - current_timestep) / (self.departure_times[a] - self.arrival_times[a])
         features[8] = (self.departure_times[b] - current_timestep) / (self.departure_times[b] - self.arrival_times[b])
 
+        features[7] = features[7] * 2 - 1
+        features[8] = features[8] * 2 - 1
+
         return features
     # def _edge_to_feature(self, edge, current_timestep=None):
     #     if current_timestep is None:
