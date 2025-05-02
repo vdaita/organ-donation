@@ -4,7 +4,7 @@ from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
 
-n_models = 4096
+n_models = 4000
 n_envs = 16
 
 env = BinaryDecisionEnvironment(n_agents=100, n_timesteps=64)
@@ -43,7 +43,7 @@ for i in tqdm(range(n_models), desc="Models", leave=False):
         done = False
         while not done:
             action = np.dot(obs, weight)
-            obs, reward, done, _, _ = env.step(action > 0.5)
+            obs, reward, done, _, _ = env.step(action >= 1)
         model_rewards.append(np.sum(env.matched_agents) / env.n_agents)
     model_rewards = np.array(model_rewards)
 
