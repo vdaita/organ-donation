@@ -1,0 +1,1 @@
+# Instead of the patient strategy, which requires us to know when the patient is going to be leaving the simulation, we only have when the patient arrives, and whether or not they are hard to match. Then, we guess how long the patient stays and tries to match them with that.

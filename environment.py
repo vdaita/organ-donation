@@ -8,7 +8,7 @@ import time
 import copy
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.087, q=0.037, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False, seed=-1, greedy_comp_mode=True):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False, seed=-1, greedy_comp_mode=True):
         self.n_agents = n_agents
 
         self.p = p
@@ -308,10 +308,10 @@ class PairedKidneyDonationEnv(gym.Env):
         reward, done = 0, False
         while not done:
             action = np.outer(self.active_agents, self.active_agents)
-            obs, new_reward, done, _, info = self.step(action, is_greedy=True)
+            obs, new_reward, done, _, info = self.step(action, is_greedy=False)
             reward += new_reward
         # print("Greedy percentage: ", sum(self.matched_agents) / self.n_agents)
-        return (sum(self.matched_agents) / self.n_agents)
+        return (np.sum(self.matched_agents) / self.n_agents)
     
 
     def get_percentage(self):
