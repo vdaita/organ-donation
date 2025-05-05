@@ -21,7 +21,10 @@ eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
 n_agents = 100
 n_timesteps = 32
-death_time = 16
+death_time = 8
+p = 0.01
+q = 0.005
+pct_hard = 0.6
 
 envs = [
     PairedKidneyDonationEnv(
@@ -29,9 +32,9 @@ envs = [
         n_timesteps=n_timesteps,
         death_time=death_time,
         seed=i,
-        p=0.037,
-        q=0.087,
-        pct_hard=0.6
+        p=p,
+        q=q,
+        pct_hard=pct_hard
     )
     for i in env_seeds
 ]
@@ -42,18 +45,23 @@ eval_envs = [
         n_timesteps=n_timesteps,
         death_time=death_time,
         seed=i,
-        p=0.037,
-        q=0.087
+        p=p,
+        q=q,
+        pct_hard=pct_hard
     )
     for i in eval_env_seeds
 ]
 
 greedy_rewards = []
-
 for env in tqdm(envs, desc="Environments"):
     greedy_rewards.append(env.get_greedy_percentage())
 greedy_rewards = np.array(greedy_rewards)
 print(f"Greedy rewards: {greedy_rewards}")
+
+eval_greedy_rewards = []
+for env in tqdm(eval_envs, desc="Evaluation envs"):
+    eval_greedy_rewards.append(env.get_greedy_percentage())
+eval_greedy_rewards = np.array(eval_greedy_rewards)
 
 def translate_number_to_action(number, obs): # number should be from 0 to 2^6 - 1
     bits = f"{number:06b}"
@@ -64,13 +72,16 @@ def translate_number_to_action(number, obs): # number should be from 0 to 2^6 - 
 
     N, _ = obs["adjacency"].shape
     is_hard = obs["is_hard"]
-    is_early = (timestep - obs["arrivals"]) <= 1 # 0 and 1
-    is_late = (obs["departures"] - timestep) <= 2
-    is_middle = np.logical_not(np.logical_or(is_early, is_late))
+
+    time_remaining = obs["departures"] - timestep
+    is_urgent = time_remaining <= 1
+    is_soon = (time_remaining > 1) & (time_remaining <= 3)
+    is_early = time_remaining > 3
+    
     times = np.zeros(N, dtype=int)
     times[is_early] = 0
-    times[is_middle] = 1
-    times[is_late] = 2
+    times[is_soon] = 1
+    times[is_urgent] = 2
 
     action = obs["adjacency"].copy()
 
@@ -110,13 +121,14 @@ def play_schedule_game(ga_instance, schedule, solution_idx):
     failures = np.sum(ratios < 1)
     failure_ratio = failures / len(ratios)
    
-    if failure_ratio > 0.2:
-        return 0 # penalize solutions that fail too much
+    if failure_ratio > 0.3:
+        return np.mean(ratios) * 0.5
 
-    ratios[ratios < 1] = ratios[ratios < 1] ** 2 # cubed ratio for negative values to weight them more negatively
-    
+    ratios[ratios < 1] = ratios[ratios < 1] ** 2
     mean_ratios = np.mean(ratios)
-
+    first_quartile = np.percentile(ratios, 25)
+    if first_quartile < 1:
+        mean_ratios = (mean_ratios + 2 * first_quartile) / 3
 
     return mean_ratios
 
@@ -124,36 +136,55 @@ def on_fitness(ga_instance, population_fitness):
     print("Fitness of the population: ", population_fitness)
 
 def evaluate_solution(schedule):
-    greedy_rewards = []
-    for env in tqdm(eval_envs, desc="Environments"):
-        greedy_rewards.append(env.get_greedy_percentage())
-    greedy_rewards = np.array(greedy_rewards)
-
     model_rewards = []
     for env in tqdm(eval_envs, desc="Environments", leave=False):
         model_rewards.append(evaluate_env(env, schedule))
     model_rewards = np.array(model_rewards)
 
-    ratios = model_rewards / greedy_rewards
-    print(f"Ratios: {ratios}")
-    plt.title("Ratios")
-    plt.boxplot(ratios)
-    plt.savefig("schedule_ratios.png")
-    plt.show()
+    ratios = model_rewards / eval_greedy_rewards
     return ratios
 
+def on_generation(ga_instance):
+    global greedy_rewards, envs
+
+    solution = ga_instance.best_solution()[0]
+    performance = evaluate_solution(solution)
+    print("Evaluation descriptive stats: ")
+    print(f"Mean: {np.mean(performance)}")
+    print(f"Std: {np.std(performance)}")
+    print(f"Min: {np.min(performance)}")
+    print(f"Max: {np.max(performance)}")
+    print(f"Geometric mean: {gmean(performance)}")
+    print(f"Median: {np.median(performance)}")
+    print(f"25th percentile: {np.percentile(performance, 25)}")
+    print(f"75th percentile: {np.percentile(performance, 75)}")
+
+    # Reset the environment
+    for env in envs:
+        env.reset()
+    
+    # Recalculate the greedy reward baselines
+    greedy_rewards = []
+    for env in tqdm(envs, desc="Environments"):
+        greedy_rewards.append(env.get_greedy_percentage())
+    greedy_rewards = np.array(greedy_rewards)
+
 if __name__ == "__main__":
-    sol_per_pop = 32
+    sol_per_pop = 64
     num_genes = n_timesteps
 
     init_range_low = 0
     init_range_high = 2**6 - 1
-    mutation_percent_genes = 10
+    mutation_percent_genes = 25
 
-    num_generations = 16
+    num_generations = 50
     num_parents_mating = sol_per_pop // 2
 
-    initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
+    # initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
+    
+    random_population = np.random.randint(init_range_low, init_range_high + 1, size=(sol_per_pop // 2, n_timesteps))
+    greedy_population = np.ones((sol_per_pop // 2, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)
+    initial_population = np.vstack((random_population, greedy_population))
 
     ga_instance = pygad.GA(num_generations=num_generations,
                         num_parents_mating=num_parents_mating, 
@@ -167,6 +198,8 @@ if __name__ == "__main__":
                         mutation_percent_genes=mutation_percent_genes,
                         gene_type=int,
                         gene_space=list(range(init_range_low, init_range_high + 1)),
+                        on_generation=on_generation,
+                        keep_elitism=5
                     )
     ga_instance.run()
 
@@ -174,9 +207,13 @@ if __name__ == "__main__":
     print(f"Parameters of the best solution : {solution}")
     print(f"Fitness value of the best solution = {solution_fitness}")
     print(f"Index of the best solution : {solution_idx}")
-    print(f"Scores: {scores[solution_idx]}")
 
     eval_ratios = evaluate_solution(solution)
+    print(f"Final eval ratios: {eval_ratios}")
+    plt.title("Ratios")
+    plt.boxplot(eval_ratios)
+    plt.savefig("results/schedule_ratios.png")
+    plt.show()
     print("Evaluation stats: ")
     print(f"Mean: {np.mean(eval_ratios)}")
     print(f"Std: {np.std(eval_ratios)}")
