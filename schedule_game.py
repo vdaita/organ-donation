@@ -6,8 +6,96 @@ from scipy.stats import gmean
 import pygad
 import random
 import matplotlib.pyplot as plt
+import rustworkx as rx
 import multiprocessing as mp
 from copy import deepcopy
+import gymnasium as gym
+import time
+
+
+class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_space = gym.spaces.MultiBinary(self.n_agents)
+
+    def step(self, action, **kwargs):
+        previous_matched = np.sum(self.matched_agents)
+        selected_nodes = np.where(action == 1)[0]
+        hard_nodes = np.where(self.is_hard_to_match[selected_nodes] == 1)[0]
+        adj_matrix = rx.adjacency_matrix(self.current_graph)
+
+        # print(adj_matrix, adj_matrix.shape)
+        
+        start_time = time.perf_counter()
+        
+        # create a new graph, give it hard nodes and selected nodes
+        new_graph = rx.PyGraph()
+        new_graph.add_nodes_from(selected_nodes)
+        new_graph.add_nodes_from(hard_nodes)
+
+        bidirectional_compatibility = np.logical_and(self.compatibility, self.compatibility.T)
+        hard_and_unmatched = np.logical_and(self.is_hard_to_match, (self.matched_agents == 0))
+        valid_edges = []
+        for node in selected_nodes:
+            mask = np.logical_and(adj_matrix[node], np.logical_and(bidirectional_compatibility[node], hard_and_unmatched))
+            valid_neighbors = np.where(mask)[0]
+            valid_edges.extend([(node, neighbor, 1) for neighbor in valid_neighbors])
+        new_graph.add_edges_from(valid_edges)
+        
+        graph_const_time = time.perf_counter() - start_time
+        
+        # Find hard matching
+        hard_matching_selected_nodes = rx.max_weight_matching(new_graph, max_cardinality=True)
+
+        mwm_time = time.perf_counter() - start_time - graph_const_time
+        
+        # Process matched nodes
+        nodes_to_remove = []
+        for edge in hard_matching_selected_nodes:
+            for node in edge:
+                nodes_to_remove.append(node)
+                self.node_matched(node)
+
+        new_graph.remove_nodes_from(nodes_to_remove)
+        new_graph.add_nodes_from(list(range(self.n_agents)))
+        easy_edges = []
+        
+        unmatched = self.matched_agents == 0
+        for node in selected_nodes:
+            mask = np.logical_and(adj_matrix[node], np.logical_and(bidirectional_compatibility[node], unmatched))
+            valid_neighbors = np.where(mask)[0]
+            easy_edges.extend([(node, neighbor, 1) for neighbor in valid_neighbors])
+        new_graph.add_edges_from(easy_edges)
+
+        easy_graph_const_time = time.perf_counter() - start_time - graph_const_time - mwm_time
+        
+        # Find easy matching
+        easy_matching_selected_nodes = rx.max_weight_matching(new_graph, max_cardinality=True)
+
+        mwm_time2 = time.perf_counter() - start_time - graph_const_time - mwm_time - easy_graph_const_time
+
+        for edge in easy_matching_selected_nodes:
+            for node in edge:
+                self.node_matched(node)
+
+        final_time = time.perf_counter() - start_time - graph_const_time - mwm_time - mwm_time2 - easy_graph_const_time
+
+        # print("Ratios: ")
+        # print(f"Graph construction time: {graph_const_time:.4f} seconds")
+        # print(f"Hard matching time: {mwm_time:.4f} seconds")
+        # print(f"Easy graph construction time: {easy_graph_const_time:.4f} seconds")
+        # print(f"Easy matching time: {mwm_time2:.4f} seconds")
+        # print(f"Final time: {final_time:.4f} seconds")
+
+        
+        self.manage_arrivals_departures()
+        self.current_step += 1
+        done = self.current_step >= self.n_timesteps
+        
+        current_matched = np.sum(self.matched_agents)
+        reward = (current_matched - previous_matched) / self.n_agents
+        return self.get_observation(), reward, done, {}, {}
+    
 
 seed = 42
 np.random.seed(seed)
@@ -22,12 +110,12 @@ eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 n_agents = 100
 n_timesteps = 32
 death_time = 8
-p = 0.01
-q = 0.005
+p = 0.037
+q = 0.087
 pct_hard = 0.6
 
 envs = [
-    PairedKidneyDonationEnv(
+    PrioritySelectionPairedKidneyDonationEnv(
         n_agents=n_agents,
         n_timesteps=n_timesteps,
         death_time=death_time,
@@ -40,7 +128,7 @@ envs = [
 ]
 
 eval_envs = [
-    PairedKidneyDonationEnv(
+    PrioritySelectionPairedKidneyDonationEnv(
         n_agents=n_agents,
         n_timesteps=n_timesteps,
         death_time=death_time,
@@ -175,14 +263,14 @@ def on_generation(ga_instance):
     greedy_rewards = np.array(greedy_rewards)
 
 if __name__ == "__main__":
-    sol_per_pop = 32
+    sol_per_pop = 64
     num_genes = n_timesteps
 
     init_range_low = 0
     init_range_high = 2**6 - 1
     mutation_percent_genes = 25
 
-    num_generations = 24
+    num_generations = 32
     num_parents_mating = sol_per_pop // 2
 
     # initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    

@@ -3,6 +3,8 @@ from environment import PairedKidneyDonationEnv
 import random
 import numpy as np
 
+# ONE OF THE CORE IDEAS THAT YOU'RE MISSING IS THAT THE SELECTED/IMPORTANT PATIENTS CAN MATCH WITH ANYONE!!! WE DON'T WANT TO RESTRICT THEM FROM PICKING UP ANYONE EXCEPT FOR PRIORITIZING THE HARD PEOPLE FIRST ADN THEN THE OTHERS LATER
+
 seed = 42
 np.random.seed(seed)
 random.seed(seed)
@@ -39,5 +41,12 @@ for estimated_death_time in estimated_death_times:
         obs, _ = env.reset(seed=env.seed)
         done = False
         while not done:
-            action = np.dot(obs, estimated_death_time)
+            arrival_times = env["arrivals"]
+            predicted_urgent = env["timestep"] >= arrival_times + estimated_death_time
+            not_predicted_urgent = np.logical_not(predicted_urgent)
+            
+            action = obs["adjacency"]
+            action[not_predicted_urgent, :] = 0
+
             obs, reward, done, _, _ = env.step(action >= 1)
+

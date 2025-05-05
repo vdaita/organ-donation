@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-import networkx as nx
+import rustworkx as rx
 from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscrete
 import matplotlib.pyplot as plt
 from typing import Tuple, Optional
@@ -91,7 +91,7 @@ class PairedKidneyDonationEnv(gym.Env):
             print("Exponential distributions: ", exponential_distributions)
 
         self.current_step = 1 # fix to make sure that we have the first few elements
-        self.current_graph = nx.Graph()
+        self.current_graph = rx.PyDiGraph()
         for i in range(self.n_agents):
             self.current_graph.add_node(i)
         return self.get_observation(), self.get_info()
@@ -101,7 +101,7 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def get_observation(self):
         return {
-            "adjacency": nx.adjacency_matrix(self.current_graph).toarray().astype(np.int8) if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
+            "adjacency": rx.adjacency_matrix(self.current_graph).astype(np.int8) if self.current_graph else np.zeros((self.n_agents, self.n_agents)),
             "timestep": self.current_step,
             "arrivals": self.arrival_times.astype(np.int8),
             "departures": self.real_departure_times.astype(np.int8),
@@ -110,11 +110,14 @@ class PairedKidneyDonationEnv(gym.Env):
             "matched": self.matched_agents.astype(np.int8),
             "total_timesteps": self.n_timesteps
         }
+    
     def clear_node_edges(self, node):
-        """Clear all edges connected to a specific node without removing the node."""
-        if self.current_graph.has_node(node):
-            edges_to_remove = list(self.current_graph.edges(node))
-            self.current_graph.remove_edges_from(edges_to_remove)
+        in_edges = list(self.current_graph.in_edges(node))
+        out_edges = list(self.current_graph.out_edges(node))
+
+        for u, v, w in in_edges + out_edges:
+            if self.current_graph.has_edge(u, v):
+                self.current_graph.remove_edge(u, v)
 
     def node_matched(self, u):
         self.clear_node_edges(u)
@@ -124,7 +127,7 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def step(self, action, is_greedy=False):
         previous_matched = np.copy(self.matched_agents)
-        adj_matrix = nx.adjacency_matrix(self.current_graph).toarray()
+        adj_matrix = rx.adjacency_matrix(self.current_graph)
         # make sure that each value is valid, only
         valid_edges = adj_matrix * np.outer(self.active_agents, self.active_agents)
         selected_edges = valid_edges * action
@@ -133,12 +136,12 @@ class PairedKidneyDonationEnv(gym.Env):
             if is_greedy:
                 if self.use_cycles:
                     raise NotImplementedError("Greedy cycles not implemented anymore")
-                reg_graph = nx.Graph()
+                reg_graph = rx.PyGraph()
                 for u in range(self.n_agents):
                     for v in range(self.n_agents):
                         if selected_edges[u, v] > 0 and self.active_agents[u] == 1 and self.active_agents[v] == 1:
                             reg_graph.add_edge(u, v)
-                best_matching = nx.max_weight_matching(reg_graph, maxcardinality=True)
+                best_matching = rx.max_weight_matching(reg_graph, maxcardinality=True)
                 for u, v in best_matching:
                     self.node_matched(u)
                     self.node_matched(v)
@@ -155,25 +158,8 @@ class PairedKidneyDonationEnv(gym.Env):
                         if self.active_agents[u] == 1 and self.active_agents[v] == 1 and self.current_graph.has_edge(u, v):
                             self.node_matched(u)
                             self.node_matched(v)
-        # add the new arrivals to the graph 
-        new_arrivals = np.where(self.arrival_times == self.current_step)[0]
 
-        for agent_idx in new_arrivals:
-            self.active_agents[agent_idx] = 1
-            # Only connect to other ACTIVE agents
-            for other_agent in self.current_graph.nodes():
-                if other_agent != agent_idx and self.active_agents[other_agent] == 1:
-                    if self.compatibility[agent_idx, other_agent] == 1:
-                        self.current_graph.add_edge(agent_idx, other_agent)
-                    if self.compatibility[other_agent, agent_idx] == 1:
-                        self.current_graph.add_edge(other_agent, agent_idx)
-
-        # Clear edges for departures
-        departures = np.where(self.real_departure_times == self.current_step)[0]
-        for agent_idx in departures:
-            if self.active_agents[agent_idx] == 1:  # Only process active agents
-                self.clear_node_edges(agent_idx)
-                self.active_agents[agent_idx] = 0
+        self.manage_arrivals_departures()
 
         self.current_step += 1
         done = self.current_step == self.n_timesteps
@@ -206,6 +192,27 @@ class PairedKidneyDonationEnv(gym.Env):
 
         return self.get_observation(), reward, done, done, self.get_info()
     
+    def manage_arrivals_departures(self):
+        # add the new arrivals to the graph 
+        new_arrivals = np.where(self.arrival_times == self.current_step)[0]
+
+        for agent_idx in new_arrivals:
+            self.active_agents[agent_idx] = 1
+            # Only connect to other ACTIVE agents
+            for other_agent in self.current_graph.nodes():
+                if other_agent != agent_idx and self.active_agents[other_agent] == 1:
+                    if self.compatibility[agent_idx, other_agent] == 1:
+                        self.current_graph.add_edge(agent_idx, other_agent, 1)
+                    if self.compatibility[other_agent, agent_idx] == 1:
+                        self.current_graph.add_edge(other_agent, agent_idx, 1)
+
+        # Clear edges for departures
+        departures = np.where(self.real_departure_times == self.current_step)[0]
+        for agent_idx in departures:
+            if self.active_agents[agent_idx] == 1:  # Only process active agents
+                self.clear_node_edges(agent_idx)
+                self.active_agents[agent_idx] = 0
+
     def greedy_future(self, action):
         # each action needs to optimize the value that happens in the future
         copied_env = copy.deepcopy(self)
