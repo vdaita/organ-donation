@@ -19,11 +19,9 @@ env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
 num_eval_envs = 256
 eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
-n_agents = 200
-n_timesteps = 64
+n_agents = 100
+n_timesteps = 32
 death_time = 16
-
-scores = {}
 
 envs = [
     PairedKidneyDonationEnv(
@@ -108,10 +106,18 @@ def play_schedule_game(ga_instance, schedule, solution_idx):
     model_rewards = np.array(model_rewards)
 
     ratios = model_rewards / greedy_rewards
-    scores[solution_idx] = ratios
 
-    ratios[ratios < 0] = ratios[ratios < 0] ** 2 # squared ratio for negative values to weight them
+    failures = np.sum(ratios < 1)
+    failure_ratio = failures / len(ratios)
+   
+    if failure_ratio > 0.2:
+        return 0 # penalize solutions that fail too much
+
+    ratios[ratios < 1] = ratios[ratios < 1] ** 2 # cubed ratio for negative values to weight them more negatively
+    
     mean_ratios = np.mean(ratios)
+
+
     return mean_ratios
 
 def on_fitness(ga_instance, population_fitness):
@@ -138,7 +144,7 @@ def evaluate_solution(schedule):
 
 if __name__ == "__main__":
     sol_per_pop = 32
-    num_genes = 16
+    num_genes = n_timesteps
 
     init_range_low = 0
     init_range_high = 2**6 - 1

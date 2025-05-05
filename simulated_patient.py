@@ -1,2 +1,12 @@
 # Instead of the patient strategy, which requires us to know when the patient is going to be leaving the simulation, we only have when the patient arrives, and whether or not they are hard to match. Then, we guess how long the patient stays and tries to match them with that.
 from environment import PairedKidneyDonationEnv
+import random
+import numpy as np
+
+seed = 42
+np.random.seed(seed)
+random.seed(seed)
+
+n_agents = 100
+n_timesteps = 32
+death_time = 16
