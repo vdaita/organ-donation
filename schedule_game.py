@@ -6,6 +6,8 @@ from scipy.stats import gmean
 import pygad
 import random
 import matplotlib.pyplot as plt
+import multiprocessing as mp
+from copy import deepcopy
 
 seed = 42
 np.random.seed(seed)
@@ -17,9 +19,9 @@ env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
 num_eval_envs = 256
 eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
-n_agents = 100
+n_agents = 200
 n_timesteps = 64
-death_time = 32
+death_time = 16
 
 scores = {}
 
@@ -90,7 +92,7 @@ def adapt_generated_schedule(schedule, n_timesteps):
     return np.array([schedule[i % schedule_len] for i in range(n_timesteps)])
 
 def evaluate_env(env, schedule) -> float:
-    schedule = adapt_generated_schedule(schedule, env.n_timesteps)
+
     obs, _  = env.start_over()
     done = False
     while not done:
@@ -136,29 +138,29 @@ def evaluate_solution(schedule):
 
 if __name__ == "__main__":
     sol_per_pop = 32
-    num_genes = n_timesteps
+    num_genes = 16
 
     init_range_low = 0
     init_range_high = 2**6 - 1
-    mutation_percent_genes = 25
+    mutation_percent_genes = 10
 
-    num_generations = 18
+    num_generations = 16
     num_parents_mating = sol_per_pop // 2
 
     initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
 
     ga_instance = pygad.GA(num_generations=num_generations,
-                       num_parents_mating=num_parents_mating, 
-                       fitness_func=play_schedule_game,
-                       sol_per_pop=sol_per_pop, 
-                       num_genes=num_genes,
-                       init_range_low=init_range_low,
-                       init_range_high=init_range_high,
-                       on_fitness=on_fitness,
-                       initial_population=initial_population,
-                       mutation_percent_genes=mutation_percent_genes,
-                       gene_type=int,
-                       gene_space=list(range(init_range_low, init_range_high + 1))
+                        num_parents_mating=num_parents_mating, 
+                        fitness_func=play_schedule_game,
+                        sol_per_pop=sol_per_pop, 
+                        num_genes=num_genes,
+                        init_range_low=init_range_low,
+                        init_range_high=init_range_high,
+                        on_fitness=on_fitness,
+                        initial_population=initial_population,
+                        mutation_percent_genes=mutation_percent_genes,
+                        gene_type=int,
+                        gene_space=list(range(init_range_low, init_range_high + 1)),
                     )
     ga_instance.run()
 
