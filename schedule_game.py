@@ -13,7 +13,7 @@ seed = 42
 np.random.seed(seed)
 random.seed(seed)
 
-num_envs = 64
+num_envs = 24
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
 
 num_eval_envs = 256
@@ -126,9 +126,9 @@ def play_schedule_game(ga_instance, schedule, solution_idx):
 
     ratios[ratios < 1] = ratios[ratios < 1] ** 2
     mean_ratios = np.mean(ratios)
-    first_quartile = np.percentile(ratios, 25)
-    if first_quartile < 1:
-        mean_ratios = (mean_ratios + 2 * first_quartile) / 3
+    first_tenth = np.percentile(ratios, 10)
+    if first_tenth < 1:
+        mean_ratios = (mean_ratios + 2 * first_tenth) / 3
 
     return mean_ratios
 
@@ -144,24 +144,29 @@ def evaluate_solution(schedule):
     ratios = model_rewards / eval_greedy_rewards
     return ratios
 
-def on_generation(ga_instance):
-    global greedy_rewards, envs
-
-    solution = ga_instance.best_solution()[0]
-    performance = evaluate_solution(solution)
-    print("Evaluation descriptive stats: ")
+def describe_performance(performance):
     print(f"Mean: {np.mean(performance)}")
     print(f"Std: {np.std(performance)}")
     print(f"Min: {np.min(performance)}")
     print(f"Max: {np.max(performance)}")
     print(f"Geometric mean: {gmean(performance)}")
     print(f"Median: {np.median(performance)}")
+    print(f"10th percentile: {np.percentile(performance, 10)}")
     print(f"25th percentile: {np.percentile(performance, 25)}")
     print(f"75th percentile: {np.percentile(performance, 75)}")
+    print(f"90th percentile: {np.percentile(performance, 90)}")
+
+def on_generation(ga_instance):
+    global greedy_rewards, envs
+
+    solution = ga_instance.best_solution()[0]
+    performance = evaluate_solution(solution)
+    print("Evaluation descriptive stats: ")
+    describe_performance(performance)
 
     # Reset the environment
     for env in envs:
-        env.reset()
+        env.reset(seed=(env.seed + num_eval_envs))
     
     # Recalculate the greedy reward baselines
     greedy_rewards = []
@@ -170,14 +175,14 @@ def on_generation(ga_instance):
     greedy_rewards = np.array(greedy_rewards)
 
 if __name__ == "__main__":
-    sol_per_pop = 64
+    sol_per_pop = 32
     num_genes = n_timesteps
 
     init_range_low = 0
     init_range_high = 2**6 - 1
     mutation_percent_genes = 25
 
-    num_generations = 50
+    num_generations = 24
     num_parents_mating = sol_per_pop // 2
 
     # initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
@@ -209,17 +214,12 @@ if __name__ == "__main__":
     print(f"Index of the best solution : {solution_idx}")
 
     eval_ratios = evaluate_solution(solution)
+
+    print("Evaluation stats: ")
+    describe_performance(eval_ratios)
+
     print(f"Final eval ratios: {eval_ratios}")
     plt.title("Ratios")
     plt.boxplot(eval_ratios)
     plt.savefig("results/schedule_ratios.png")
     plt.show()
-    print("Evaluation stats: ")
-    print(f"Mean: {np.mean(eval_ratios)}")
-    print(f"Std: {np.std(eval_ratios)}")
-    print(f"Min: {np.min(eval_ratios)}")
-    print(f"Max: {np.max(eval_ratios)}")
-    print(f"Geometric mean: {gmean(eval_ratios)}")
-    print(f"Median: {np.median(eval_ratios)}")
-    print(f"25th percentile: {np.percentile(eval_ratios, 25)}")
-    print(f"75th percentile: {np.percentile(eval_ratios, 75)}")

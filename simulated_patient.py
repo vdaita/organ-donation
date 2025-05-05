@@ -21,13 +21,23 @@ estimated_death_times = [
 
 seeds = np.random(0, 2**32 - 1)
 
-env = PairedKidneyDonationEnv(
-    n_agents=n_agents,
-    n_timesteps=n_timesteps,
-    death_time=death_time,
-    seed=seed,
-    p=0.037,
-    q=0.087
-)
+envs = [
+    PairedKidneyDonationEnv(
+        n_agents=n_agents,
+        n_timesteps=n_timesteps,
+        death_time=death_time,
+        seed=i,
+        p=0.01,
+        q=0.005,
+        pct_hard=0.6
+    )
+    for i in seeds
+]
 
 for estimated_death_time in estimated_death_times:
+    for env in envs:
+        obs, _ = env.reset(seed=env.seed)
+        done = False
+        while not done:
+            action = np.dot(obs, estimated_death_time)
+            obs, reward, done, _, _ = env.step(action >= 1)
