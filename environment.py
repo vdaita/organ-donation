@@ -8,14 +8,14 @@ import time
 import copy
 
 class PairedKidneyDonationEnv(gym.Env):
-    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_range=[150, 350], n_timesteps=700, use_cycles=False, seed=-1, greedy_comp_mode=True):
+    def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_time=350, n_timesteps=700, use_cycles=False, seed=-1, greedy_comp_mode=True):
         self.n_agents = n_agents
 
         self.p = p
         self.q = q
         self.pct_hard = pct_hard
         self.arrival_rate = arrival_rate
-        self.death_range = death_range # simpler way to model people exiting the market
+        self.death_time = death_time # going back to the exponential distribution for departure
         self.use_cycles = use_cycles
         self.n_timesteps = n_timesteps
         self.observation_space = Dict({
@@ -74,8 +74,8 @@ class PairedKidneyDonationEnv(gym.Env):
         self.arrival_times[0] = 0
         
         # Generate departure times based on arrival times plus criticality duration
-        uniform_distributions = self.np_random.uniform(self.death_range[0], self.death_range[1], self.n_agents)
-        self.real_departure_times = np.minimum(self.arrival_times + uniform_distributions, np.ones(self.n_agents) * self.n_timesteps)
+        exponential_distributions = self.np_random.exponential(1, (self.n_agents, )) * self.death_time
+        self.real_departure_times = np.minimum(self.arrival_times + exponential_distributions, np.ones(self.n_agents) * self.n_timesteps)
 
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
@@ -88,6 +88,7 @@ class PairedKidneyDonationEnv(gym.Env):
             print(f"Average arrival time: {np.mean(self.arrival_times):.2f}")
             print("Arrival times: ", self.arrival_times)
             print("Departure times: ", self.real_departure_times)
+            print("Exponential distributions: ", exponential_distributions)
 
         self.current_step = 1 # fix to make sure that we have the first few elements
         self.current_graph = nx.Graph()

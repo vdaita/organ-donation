@@ -4,13 +4,22 @@ import numpy as np
 from environment import PairedKidneyDonationEnv
 from scipy.stats import gmean
 import pygad
+import random
+import matplotlib.pyplot as plt
 
-num_envs = 32
-env_seeds = [i for i in range(0, num_envs)]
+seed = 42
+np.random.seed(seed)
+random.seed(seed)
+
+num_envs = 64
+env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
+
+num_eval_envs = 256
+eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
 n_agents = 100
-n_timesteps = 64
-death_range = [28, 32]
+n_timesteps = 32
+death_time = 16
 
 scores = {}
 
@@ -18,12 +27,24 @@ envs = [
     PairedKidneyDonationEnv(
         n_agents=n_agents,
         n_timesteps=n_timesteps,
-        death_range=death_range,
+        death_range=death_time,
         seed=i,
         p=0.01,
-        q=0.001
+        q=0.005
     )
     for i in env_seeds
+]
+
+eval_envs = [
+    PairedKidneyDonationEnv(
+        n_agents=n_agents,
+        n_timesteps=n_timesteps,
+        death_range=death_time,
+        seed=i,
+        p=0.01,
+        q=0.005
+    )
+    for i in eval_env_seeds
 ]
 
 greedy_rewards = []
@@ -61,54 +82,58 @@ def translate_number_to_action(number, obs): # number should be from 0 to 2^6 - 
 
     return action
 
+def evaluate_env(env, schedule) -> float:
+    obs, _  = env.start_over()
+    done = False
+    while not done:
+        action = translate_number_to_action(schedule[obs["timestep"]], obs)
+        obs, reward, done, _, _ = env.step(action)
+    total_reward = np.sum(env.matched_agents) / env.n_agents
+    return total_reward
+
 def play_schedule_game(ga_instance, schedule, solution_idx):
-    env = PairedKidneyDonationEnv(
-        n_agents=n_agents,
-        n_timesteps=n_timesteps,
-        death_range=death_range
-    )
     model_rewards = []
     for env in tqdm(envs, desc="Environments", leave=False):
-        obs, _ = env.start_over()
-        done = False
-        while not done:
-            action = translate_number_to_action(schedule[obs["timestep"]], obs)
-            obs, reward, done, _, _ = env.step(action)
-        model_reward = np.sum(env.matched_agents) / env.n_agents
-        model_rewards.append(model_reward)
+        model_rewards.append(evaluate_env(env, schedule))
     model_rewards = np.array(model_rewards)
+
     ratios = model_rewards / greedy_rewards
-    # print(f"Model rewards: {model_rewards}")
-    # print(f"Ratios: {ratios}")
-    mean_ratios = np.mean(ratios)
     scores[solution_idx] = ratios
 
-    # if gmean_ratios > 1:
-    #     print("-> Better than greedy")
-    #     print(f"Ratios: {ratios}")
-    #     print(f"Schedule: {schedule}")
-
+    ratios[ratios < 0] = ratios[ratios < 0] ** 2 # squared ratio for negative values to weight them
+    mean_ratios = np.mean(ratios)
     return mean_ratios
 
 def on_fitness(ga_instance, population_fitness):
     print("Fitness of the population: ", population_fitness)
 
+def evaluate_solution(schedule):
+    model_rewards = []
+    for env in tqdm(eval_envs, desc="Environments", leave=False):
+        model_rewards.append(evaluate_env(env, schedule))
+    model_rewards = np.array(model_rewards)
+
+    ratios = model_rewards / greedy_rewards
+    print(f"Ratios: {ratios}")
+    plt.title("Ratios")
+    plt.boxplot(ratios)
+    plt.savefig("schedule_ratios.png")
+    plt.show()
+    mean_ratios = np.mean(ratios) # for this one, we don't square the negative values
+    return mean_ratios
+
 if __name__ == "__main__":
-    sol_per_pop = 16
+    sol_per_pop = 32
     num_genes = n_timesteps
+
     init_range_low = 0
     init_range_high = 2**6 - 1
-    mutation_percent_genes = 20
+    mutation_percent_genes = 25
 
-    num_generations = 32
+    num_generations = 48
     num_parents_mating = sol_per_pop // 2
 
-    # initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)
-    best_last = [40, 58, 6, 3, 45, 18, 18, 63, 48, 63, 37, 37, 5, 11, 50, 35, 0, 24, 49, 33, 63, 60, 60, 3, 
-             13, 63, 63, 14, 63, 2, 44, 10, 63, 60, 9, 35, 58, 11, 12, 27, 19, 47, 49, 27, 44, 23, 63, 49,
-             49, 23, 28, 63, 52, 49, 0, 26, 63, 63, 51, 25, 31, 52, 22, 53]
-    initial_population = np.array([best_last] * sol_per_pop)
-    
+    initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
 
     ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating, 
@@ -130,3 +155,5 @@ if __name__ == "__main__":
     print(f"Fitness value of the best solution = {solution_fitness}")
     print(f"Index of the best solution : {solution_idx}")
     print(f"Scores: {scores[solution_idx]}")
+
+    evaluate_solution(solution)
