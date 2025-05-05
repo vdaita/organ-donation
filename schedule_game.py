@@ -18,8 +18,8 @@ num_eval_envs = 256
 eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
 n_agents = 100
-n_timesteps = 32
-death_time = 16
+n_timesteps = 64
+death_time = 32
 
 scores = {}
 
@@ -27,10 +27,11 @@ envs = [
     PairedKidneyDonationEnv(
         n_agents=n_agents,
         n_timesteps=n_timesteps,
-        death_range=death_time,
+        death_time=death_time,
         seed=i,
-        p=0.01,
-        q=0.005
+        p=0.037,
+        q=0.087,
+        pct_hard=0.6
     )
     for i in env_seeds
 ]
@@ -39,10 +40,10 @@ eval_envs = [
     PairedKidneyDonationEnv(
         n_agents=n_agents,
         n_timesteps=n_timesteps,
-        death_range=death_time,
+        death_time=death_time,
         seed=i,
-        p=0.01,
-        q=0.005
+        p=0.037,
+        q=0.087
     )
     for i in eval_env_seeds
 ]
@@ -82,7 +83,14 @@ def translate_number_to_action(number, obs): # number should be from 0 to 2^6 - 
 
     return action
 
+def adapt_generated_schedule(schedule, n_timesteps):
+    schedule_len = len(schedule)
+    if n_timesteps % schedule_len != 0:
+        raise ValueError("Schedule length must be a divisor of n_timesteps.")
+    return np.array([schedule[i % schedule_len] for i in range(n_timesteps)])
+
 def evaluate_env(env, schedule) -> float:
+    schedule = adapt_generated_schedule(schedule, env.n_timesteps)
     obs, _  = env.start_over()
     done = False
     while not done:
@@ -108,6 +116,11 @@ def on_fitness(ga_instance, population_fitness):
     print("Fitness of the population: ", population_fitness)
 
 def evaluate_solution(schedule):
+    greedy_rewards = []
+    for env in tqdm(eval_envs, desc="Environments"):
+        greedy_rewards.append(env.get_greedy_percentage())
+    greedy_rewards = np.array(greedy_rewards)
+
     model_rewards = []
     for env in tqdm(eval_envs, desc="Environments", leave=False):
         model_rewards.append(evaluate_env(env, schedule))
@@ -119,8 +132,7 @@ def evaluate_solution(schedule):
     plt.boxplot(ratios)
     plt.savefig("schedule_ratios.png")
     plt.show()
-    mean_ratios = np.mean(ratios) # for this one, we don't square the negative values
-    return mean_ratios
+    return ratios
 
 if __name__ == "__main__":
     sol_per_pop = 32
@@ -130,7 +142,7 @@ if __name__ == "__main__":
     init_range_high = 2**6 - 1
     mutation_percent_genes = 25
 
-    num_generations = 48
+    num_generations = 18
     num_parents_mating = sol_per_pop // 2
 
     initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
@@ -156,4 +168,13 @@ if __name__ == "__main__":
     print(f"Index of the best solution : {solution_idx}")
     print(f"Scores: {scores[solution_idx]}")
 
-    evaluate_solution(solution)
+    eval_ratios = evaluate_solution(solution)
+    print("Evaluation stats: ")
+    print(f"Mean: {np.mean(eval_ratios)}")
+    print(f"Std: {np.std(eval_ratios)}")
+    print(f"Min: {np.min(eval_ratios)}")
+    print(f"Max: {np.max(eval_ratios)}")
+    print(f"Geometric mean: {gmean(eval_ratios)}")
+    print(f"Median: {np.median(eval_ratios)}")
+    print(f"25th percentile: {np.percentile(eval_ratios, 25)}")
+    print(f"75th percentile: {np.percentile(eval_ratios, 75)}")
