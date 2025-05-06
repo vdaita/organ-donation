@@ -75,7 +75,10 @@ class PairedKidneyDonationEnv(gym.Env):
         
         # Generate departure times based on arrival times plus criticality duration
         exponential_distributions = self.np_random.exponential(1, (self.n_agents, )) * self.death_time
+        exponential_distributions = exponential_distributions.astype(int)
         self.real_departure_times = np.minimum(self.arrival_times + exponential_distributions, np.ones(self.n_agents) * self.n_timesteps)
+        # print("Exponential distributions: ", exponential_distributions)
+        # print("Departure times: ", self.real_departure_times)
 
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
@@ -208,6 +211,7 @@ class PairedKidneyDonationEnv(gym.Env):
 
         # Clear edges for departures
         departures = np.where(self.real_departure_times == self.current_step)[0]
+        # print("Departures: ", departures, " which are leaving after: ", self.real_departure_times[departures] - self.arrival_times[departures])
         for agent_idx in departures:
             if self.active_agents[agent_idx] == 1:  # Only process active agents
                 self.clear_node_edges(agent_idx)
@@ -314,11 +318,19 @@ class PairedKidneyDonationEnv(gym.Env):
     def get_greedy_percentage(self):
         obs, info = self.start_over()
         reward, done = 0, False
+        # Add counters
+        total_departures = 0
+        capped_departures = 0
+        
+        # Calculate original departure distribution
+        uncapped_departures = self.arrival_times + (self.np_random.exponential(1, (self.n_agents, )) * self.death_time)
+        capped_departures_count = np.sum(uncapped_departures >= self.n_timesteps)
+        # print(f"Agents with departures capped by simulation end: {capped_departures_count}/{self.n_agents} ({capped_departures_count/self.n_agents*100:.1f}%)")
+        
         while not done:
             action = np.outer(self.active_agents, self.active_agents)
             obs, new_reward, done, _, info = self.step(action, is_greedy=False)
             reward += new_reward
-        # print("Greedy percentage: ", sum(self.matched_agents) / self.n_agents)
         return (np.sum(self.matched_agents) / self.n_agents)
     
 
