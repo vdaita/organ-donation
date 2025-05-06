@@ -11,8 +11,8 @@ if __name__ == "__main__":
     random.seed(seed)
 
     n_agents = 400
-    n_timesteps = 32
-    death_time = 16
+    n_timesteps = 128
+    death_time = 64
 
     num_envs = 16
     p = 0.037
@@ -74,6 +74,12 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     labels = list(ratios.keys())
     data = [ratios[label] for label in labels]
+
+    print("Greedy strategy cost: ")
+    print(np.mean(greedy_rewards))
+    print("Patient strategy cost: ")
+    print(np.mean(patient_rewards))
+
 
     plt.boxplot(data, labels=labels)
     plt.ylabel("Reward Ratio")
