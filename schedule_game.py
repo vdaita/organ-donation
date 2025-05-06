@@ -11,7 +11,15 @@ import multiprocessing as mp
 from copy import deepcopy
 import gymnasium as gym
 import time
+import numba as nb
 
+@nb.njit(fastmath=True, parallel=True)
+def get_edges(selected_nodes, matchable_nodes, adj_matrix):
+    adj_bidirectional = np.logical_and(adj_matrix, adj_matrix.T)
+    adj_view = adj_bidirectional[selected_nodes][:, matchable_nodes]
+    edges = np.argwhere(adj_view == 1)
+    edges = [(selected_nodes[edge[0]], matchable_nodes[edge[1]], 1) for edge in edges]
+    return edges
 
 class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
     def __init__(self, *args, **kwargs):
@@ -23,24 +31,29 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
         graph = rx.PyGraph()
         graph.add_nodes_from(range(self.n_agents))
 
-        adj_bidirectional = np.logical_and(adj_matrix, adj_matrix.T)
-        adj_bidirectional = adj_bidirectional[selected_nodes][:, matchable_nodes]
+        adj_matrix_time = time.perf_counter() - start_time
         
-        edges = np.argwhere(adj_bidirectional == 1)
-        rx_edges = []
-        for edge in edges:
-            left_node = selected_nodes[edge[0]]
-            right_node = matchable_nodes[edge[1]]
-
-            rx_edges.append((left_node, right_node, 1))
+        rx_edges = get_edges(selected_nodes, matchable_nodes, adj_matrix)
         graph.add_edges_from(rx_edges)
 
+        edge_add_time = time.perf_counter() - start_time - adj_matrix_time
+
         matching = rx.max_weight_matching(graph, max_cardinality=True)
+
+        matching_time = time.perf_counter() - start_time - edge_add_time - adj_matrix_time
+
         for pair in matching:
             self.node_matched(pair[0])
             self.node_matched(pair[1])
 
-        end_time = time.perf_counter()
+        end_time = time.perf_counter() - start_time - adj_matrix_time - edge_add_time - matching_time
+
+        # print(f"Adjacency matrix time: {adj_matrix_time:.6f} seconds")
+        # print(f"Edge addition time: {edge_add_time:.6f} seconds")
+        # print(f"Matching time: {matching_time:.6f} seconds")
+        # print(f"Marking time: {end_time:.6f} seconds")
+       
+
         # print(f"Matching time: {end_time - start_time:.6f} seconds")
 
 
