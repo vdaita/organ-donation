@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from typing import Tuple, Optional
 import time
 import copy
+import numba as nb
 
 class PairedKidneyDonationEnv(gym.Env):
     def __init__(self, n_agents=1000, p=0.037, q=0.087, pct_hard=0.6, arrival_rate=1, death_time=350, n_timesteps=700, use_cycles=False, seed=-1, greedy_comp_mode=True):
@@ -355,3 +356,107 @@ class PairedKidneyDonationEnv(gym.Env):
         # find the maximum matching
         matching = rx.max_weight_matching(graph, max_cardinality=True)
         return 2 * len(matching) / self.n_agents
+    
+@nb.njit(fastmath=True, parallel=True)
+def get_edges_cycles(selected_nodes, matchable_nodes, adj_matrix):
+    adj_view = adj_matrix[selected_nodes][:, matchable_nodes]
+    edges = np.argwhere(adj_view == 1)
+    edges = [(selected_nodes[edge[0]], matchable_nodes[edge[1]], 1) for edge in edges]
+    return edges
+
+@nb.njit(fastmath=True, parallel=True)
+def get_edges(selected_nodes, matchable_nodes, adj_matrix):
+    adj_bidirectional = np.logical_and(adj_matrix, adj_matrix.T)
+    adj_view = adj_bidirectional[selected_nodes][:, matchable_nodes]
+    edges = np.argwhere(adj_view == 1)
+    edges = [(selected_nodes[edge[0]], matchable_nodes[edge[1]], 1) for edge in edges]
+    return edges
+
+class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_space = gym.spaces.MultiBinary(self.n_agents)
+
+    def match_subgraph(self, selected_nodes, matchable_nodes, adj_matrix):
+        start_time = time.perf_counter()
+        
+        if self.use_cycles:
+            graph = rx.PyDiGraph()
+            graph.add_nodes_from(range(self.n_agents))
+            rx_edges = get_edges_cycles(selected_nodes, matchable_nodes, adj_matrix)
+            graph.add_edges_from(rx_edges)
+
+            edge_add_time = time.perf_counter() - start_time - adj_matrix_time
+
+            while True:
+                current_cycle = rx.digraph_find_cycle(graph)
+                if current_cycle is None or len(current_cycle) == 0:
+                    break
+                for u, v in current_cycle:
+                    self.node_matched(u)
+                    self.node_matched(v)
+                    graph.remove_node(u)
+                    graph.remove_node(v)
+        else:
+            graph = rx.PyGraph()
+            graph.add_nodes_from(range(self.n_agents))
+            rx_edges = get_edges(selected_nodes, matchable_nodes, adj_matrix)
+            graph.add_edges_from(rx_edges)
+
+            edge_add_time = time.perf_counter() - start_time
+
+            # Find the maximum matching
+            best_matching = rx.max_weight_matching(graph, max_cardinality=True)
+            for u, v in best_matching: # we already know they are getting matched
+                self.node_matched(u)
+                self.node_matched(v)
+
+        matching_time = time.perf_counter() - start_time - edge_add_time
+        end_time = time.perf_counter() - start_time - edge_add_time - matching_time
+
+        # print(f"Adjacency matrix time: {adj_matrix_time:.6f} seconds")
+        # print(f"Edge addition time: {edge_add_time:.6f} seconds")
+        # print(f"Matching time: {matching_time:.6f} seconds")
+        # print(f"Marking time: {end_time:.6f} seconds")
+       
+
+    def step(self, action, **kwargs):
+        previous_matched = np.sum(self.matched_agents)
+
+        selected_nodes = np.where(action == 1)[0]
+        hard_indices = np.where(self.is_hard_to_match == 1)[0]
+        
+        adj_matrix = rx.adjacency_matrix(self.current_graph)
+        
+        self.match_subgraph(selected_nodes, hard_indices, adj_matrix)
+        self.match_subgraph(selected_nodes, np.arange(self.n_agents), adj_matrix)
+
+        self.manage_arrivals_departures()
+        self.current_step += 1
+        done = self.current_step >= self.n_timesteps
+        
+        current_matched = np.sum(self.matched_agents)
+        reward = (current_matched - previous_matched) / self.n_agents
+        return self.get_observation(), reward, done, {}, {}
+    
+
+    def get_greedy_percentage(self):
+        obs, _ = self.start_over()
+        done = False
+        while not done:
+            action = np.ones(self.n_agents)
+            obs, reward, done, _, _ = self.step(action)
+        total_reward = np.sum(self.matched_agents) / self.n_agents
+        return total_reward
+
+    def get_patient_percentage(self):
+        obs, _ = self.start_over()
+        done = False
+        while not done:
+            action = np.zeros(self.n_agents)
+            for i in range(self.n_agents):
+                if self.real_departure_times[i] - self.current_step == 1:
+                    action[i] = 1
+            obs, reward, done, _, _ = self.step(action)
+        total_reward = np.sum(self.matched_agents) / self.n_agents
+        return total_reward

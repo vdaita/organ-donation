@@ -1,7 +1,7 @@
 import gymnasium as gym
 from tqdm import tqdm
 import numpy as np
-from environment import PairedKidneyDonationEnv
+from environment import PrioritySelectionPairedKidneyDonationEnv
 from scipy.stats import gmean
 import pygad
 import random
@@ -12,91 +12,6 @@ from copy import deepcopy
 import gymnasium as gym
 import time
 import numba as nb
-
-@nb.njit(fastmath=True, parallel=True)
-def get_edges(selected_nodes, matchable_nodes, adj_matrix):
-    adj_bidirectional = np.logical_and(adj_matrix, adj_matrix.T)
-    adj_view = adj_bidirectional[selected_nodes][:, matchable_nodes]
-    edges = np.argwhere(adj_view == 1)
-    edges = [(selected_nodes[edge[0]], matchable_nodes[edge[1]], 1) for edge in edges]
-    return edges
-
-class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.action_space = gym.spaces.MultiBinary(self.n_agents)
-
-    def match_subgraph(self, selected_nodes, matchable_nodes, adj_matrix):
-        start_time = time.perf_counter()
-        graph = rx.PyGraph()
-        graph.add_nodes_from(range(self.n_agents))
-
-        adj_matrix_time = time.perf_counter() - start_time
-        
-        rx_edges = get_edges(selected_nodes, matchable_nodes, adj_matrix)
-        graph.add_edges_from(rx_edges)
-
-        edge_add_time = time.perf_counter() - start_time - adj_matrix_time
-
-        matching = rx.max_weight_matching(graph, max_cardinality=True)
-
-        matching_time = time.perf_counter() - start_time - edge_add_time - adj_matrix_time
-
-        for pair in matching:
-            self.node_matched(pair[0])
-            self.node_matched(pair[1])
-
-        end_time = time.perf_counter() - start_time - adj_matrix_time - edge_add_time - matching_time
-
-        # print(f"Adjacency matrix time: {adj_matrix_time:.6f} seconds")
-        # print(f"Edge addition time: {edge_add_time:.6f} seconds")
-        # print(f"Matching time: {matching_time:.6f} seconds")
-        # print(f"Marking time: {end_time:.6f} seconds")
-       
-
-        # print(f"Matching time: {end_time - start_time:.6f} seconds")
-
-
-    def step(self, action, **kwargs):
-        previous_matched = np.sum(self.matched_agents)
-
-        selected_nodes = np.where(action == 1)[0]
-        hard_indices = np.where(self.is_hard_to_match == 1)[0]
-        
-        adj_matrix = rx.adjacency_matrix(self.current_graph)
-        
-        self.match_subgraph(selected_nodes, hard_indices, adj_matrix)
-        self.match_subgraph(selected_nodes, np.arange(self.n_agents), adj_matrix)
-
-        self.manage_arrivals_departures()
-        self.current_step += 1
-        done = self.current_step >= self.n_timesteps
-        
-        current_matched = np.sum(self.matched_agents)
-        reward = (current_matched - previous_matched) / self.n_agents
-        return self.get_observation(), reward, done, {}, {}
-    
-
-    def get_greedy_percentage(self):
-        obs, _ = self.start_over()
-        done = False
-        while not done:
-            action = np.ones(self.n_agents)
-            obs, reward, done, _, _ = self.step(action)
-        total_reward = np.sum(self.matched_agents) / self.n_agents
-        return total_reward
-
-    def get_patient_percentage(self):
-        obs, _ = self.start_over()
-        done = False
-        while not done:
-            action = np.zeros(self.n_agents)
-            for i in range(self.n_agents):
-                if self.real_departure_times[i] - self.current_step == 1:
-                    action[i] = 1
-            obs, reward, done, _, _ = self.step(action)
-        total_reward = np.sum(self.matched_agents) / self.n_agents
-        return total_reward
 
 seed = 42
 np.random.seed(seed)
@@ -109,11 +24,11 @@ num_eval_envs = 128
 eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
 n_agents = 100
-n_timesteps = 32
-death_time = 16
-p = 0.037 * 2
-q = 0.087 * 2
-pct_hard = 0.7
+n_timesteps = 64
+death_time = 32
+p = 0.3
+q = 0.15
+pct_hard = 0.8
 
 envs = [
     PrioritySelectionPairedKidneyDonationEnv(
@@ -329,6 +244,8 @@ if __name__ == "__main__":
                         gene_type=int,
                         gene_space=list(range(init_range_low, init_range_high + 1)),
                         on_generation=on_generation,
+                        keep_parents=0,
+                        keep_elitism=0
                     )
     ga_instance.run()
 
