@@ -18,76 +18,43 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
         super().__init__(*args, **kwargs)
         self.action_space = gym.spaces.MultiBinary(self.n_agents)
 
+    def match_subgraph(self, selected_nodes, matchable_nodes, adj_matrix):
+        start_time = time.perf_counter()
+        graph = rx.PyGraph()
+        graph.add_nodes_from(range(self.n_agents))
+
+        adj_bidirectional = np.logical_and(adj_matrix, adj_matrix.T)
+        adj_bidirectional = adj_bidirectional[selected_nodes][:, matchable_nodes]
+        
+        edges = np.argwhere(adj_bidirectional == 1)
+        rx_edges = []
+        for edge in edges:
+            left_node = selected_nodes[edge[0]]
+            right_node = matchable_nodes[edge[1]]
+
+            rx_edges.append((left_node, right_node, 1))
+        graph.add_edges_from(rx_edges)
+
+        matching = rx.max_weight_matching(graph, max_cardinality=True)
+        for pair in matching:
+            self.node_matched(pair[0])
+            self.node_matched(pair[1])
+
+        end_time = time.perf_counter()
+        # print(f"Matching time: {end_time - start_time:.6f} seconds")
+
+
     def step(self, action, **kwargs):
         previous_matched = np.sum(self.matched_agents)
+
         selected_nodes = np.where(action == 1)[0]
-        hard_nodes = np.where(self.is_hard_to_match[selected_nodes] == 1)[0]
+        hard_indices = np.where(self.is_hard_to_match == 1)[0]
+        
         adj_matrix = rx.adjacency_matrix(self.current_graph)
-
-        # print(adj_matrix, adj_matrix.shape)
         
-        start_time = time.perf_counter()
-        
-        # create a new graph, give it hard nodes and selected nodes
-        new_graph = rx.PyGraph()
-        new_graph.add_nodes_from(selected_nodes)
-        new_graph.add_nodes_from(hard_nodes)
+        self.match_subgraph(selected_nodes, hard_indices, adj_matrix)
+        self.match_subgraph(selected_nodes, np.arange(self.n_agents), adj_matrix)
 
-        bidirectional_compatibility = np.logical_and(self.compatibility, self.compatibility.T)
-        hard_and_unmatched = np.logical_and(self.is_hard_to_match, (self.matched_agents == 0))
-        valid_edges = []
-        for node in selected_nodes:
-            mask = np.logical_and(adj_matrix[node], np.logical_and(bidirectional_compatibility[node], hard_and_unmatched))
-            valid_neighbors = np.where(mask)[0]
-            valid_edges.extend([(node, neighbor, 1) for neighbor in valid_neighbors])
-        new_graph.add_edges_from(valid_edges)
-        
-        graph_const_time = time.perf_counter() - start_time
-        
-        # Find hard matching
-        hard_matching_selected_nodes = rx.max_weight_matching(new_graph, max_cardinality=True)
-
-        mwm_time = time.perf_counter() - start_time - graph_const_time
-        
-        # Process matched nodes
-        nodes_to_remove = []
-        for edge in hard_matching_selected_nodes:
-            for node in edge:
-                nodes_to_remove.append(node)
-                self.node_matched(node)
-
-        new_graph.remove_nodes_from(nodes_to_remove)
-        new_graph.add_nodes_from(list(range(self.n_agents)))
-        easy_edges = []
-        
-        unmatched = self.matched_agents == 0
-        for node in selected_nodes:
-            mask = np.logical_and(adj_matrix[node], np.logical_and(bidirectional_compatibility[node], unmatched))
-            valid_neighbors = np.where(mask)[0]
-            easy_edges.extend([(node, neighbor, 1) for neighbor in valid_neighbors])
-        new_graph.add_edges_from(easy_edges)
-
-        easy_graph_const_time = time.perf_counter() - start_time - graph_const_time - mwm_time
-        
-        # Find easy matching
-        easy_matching_selected_nodes = rx.max_weight_matching(new_graph, max_cardinality=True)
-
-        mwm_time2 = time.perf_counter() - start_time - graph_const_time - mwm_time - easy_graph_const_time
-
-        for edge in easy_matching_selected_nodes:
-            for node in edge:
-                self.node_matched(node)
-
-        final_time = time.perf_counter() - start_time - graph_const_time - mwm_time - mwm_time2 - easy_graph_const_time
-
-        # print("Ratios: ")
-        # print(f"Graph construction time: {graph_const_time:.4f} seconds")
-        # print(f"Hard matching time: {mwm_time:.4f} seconds")
-        # print(f"Easy graph construction time: {easy_graph_const_time:.4f} seconds")
-        # print(f"Easy matching time: {mwm_time2:.4f} seconds")
-        # print(f"Final time: {final_time:.4f} seconds")
-
-        
         self.manage_arrivals_departures()
         self.current_step += 1
         done = self.current_step >= self.n_timesteps
