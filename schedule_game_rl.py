@@ -29,7 +29,7 @@ pct_hard = 0.8
 num_envs = 16
 num_eval_envs = 128
 eval_freq = 2048
-total_timesteps = 1000000
+total_timesteps = 2000000
 
 # Create environment seeds
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()

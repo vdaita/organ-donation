@@ -66,8 +66,9 @@ if __name__ == "__main__":
         "regular": []
     }
     
+    pct_less_sick_values = [0.05, 0.1, 0.25, 0.33, 0.5]
 
-    for pct_less_sick in tqdm([0.25, 0.33, 0.5, 0.75], desc="Less sick envs"):
+    for pct_less_sick in tqdm(pct_less_sick_values, desc="Less sick envs"):
         new_agents_count = int(n_agents_original * (1 / (1 - pct_less_sick)))
         less_sick_envs = [
             LessSickPairedKidneyDonationEnv(
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     data.append(stats["regular"])
 
     # Collect data for each less sick percentage
-    for pct_less_sick in [0.25, 0.33, 0.5, 0.75]:
+    for pct_less_sick in pct_less_sick_values:
         key = f"{pct_less_sick}x_less_sick"
         labels.append(f"{int(pct_less_sick*100)}% less sick")
         data.append(stats[key])
