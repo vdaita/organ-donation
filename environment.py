@@ -336,3 +336,22 @@ class PairedKidneyDonationEnv(gym.Env):
 
     def get_percentage(self):
         return sum(self.matched_agents) / self.n_agents
+    
+    def calculate_theoretical_max(self):
+        # based on compat and arrival/departure times, compute a theoretical maximum
+        graph = rx.PyGraph()
+        for i in range(self.n_agents):
+            graph.add_node(i)
+        
+        for i in range(self.n_agents):
+            for j in range(self.n_agents):
+                if self.compatibility[i, j] == 1 and self.compatibility[j, i] == 1:
+                    range_i = [self.arrival_times[i], self.real_departure_times[i]]
+                    range_j = [self.arrival_times[j], self.real_departure_times[j]]
+                    # if overlap, then add the edge
+                    if range_i[0] < range_j[1] and range_j[0] < range_i[1]:
+                        graph.add_edge(i, j, 1)
+        
+        # find the maximum matching
+        matching = rx.max_weight_matching(graph, max_cardinality=True)
+        return 2 * len(matching) / self.n_agents

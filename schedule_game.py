@@ -77,22 +77,43 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
         return self.get_observation(), reward, done, {}, {}
     
 
+    def get_greedy_percentage(self):
+        obs, _ = self.start_over()
+        done = False
+        while not done:
+            action = np.ones(self.n_agents)
+            obs, reward, done, _, _ = self.step(action)
+        total_reward = np.sum(self.matched_agents) / self.n_agents
+        return total_reward
+
+    def get_patient_percentage(self):
+        obs, _ = self.start_over()
+        done = False
+        while not done:
+            action = np.zeros(self.n_agents)
+            for i in range(self.n_agents):
+                if self.real_departure_times[i] - self.current_step == 1:
+                    action[i] = 1
+            obs, reward, done, _, _ = self.step(action)
+        total_reward = np.sum(self.matched_agents) / self.n_agents
+        return total_reward
+
 seed = 42
 np.random.seed(seed)
 random.seed(seed)
 
-num_envs = 24
+num_envs = 16
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
 
-num_eval_envs = 256
+num_eval_envs = 128
 eval_env_seeds = np.random.randint(0, 2**32 - 1, size=num_eval_envs).tolist()
 
 n_agents = 100
 n_timesteps = 32
-death_time = 8
-p = 0.037
-q = 0.087
-pct_hard = 0.6
+death_time = 16
+p = 0.037 * 2
+q = 0.087 * 2
+pct_hard = 0.7
 
 envs = [
     PrioritySelectionPairedKidneyDonationEnv(
@@ -120,11 +141,6 @@ eval_envs = [
     for i in eval_env_seeds
 ]
 
-greedy_rewards = []
-for env in tqdm(envs, desc="Environments"):
-    greedy_rewards.append(env.get_greedy_percentage())
-greedy_rewards = np.array(greedy_rewards)
-print(f"Greedy rewards: {greedy_rewards}")
 
 eval_greedy_rewards = []
 for env in tqdm(eval_envs, desc="Evaluation envs"):
@@ -193,7 +209,7 @@ def play_schedule_game(ga_instance, schedule, solution_idx):
         return np.mean(ratios) * 0.5
 
     ratios[ratios < 1] = ratios[ratios < 1] ** 2
-    mean_ratios = np.mean(ratios)
+    mean_ratios = gmean(ratios)
     first_tenth = np.percentile(ratios, 10)
     if first_tenth < 1:
         mean_ratios = (mean_ratios + 2 * first_tenth) / 3
@@ -225,39 +241,80 @@ def describe_performance(performance):
     print(f"90th percentile: {np.percentile(performance, 90)}")
 
 def on_generation(ga_instance):
-    global greedy_rewards, envs
+    global greedy_rewards, num_envs, envs
 
     solution = ga_instance.best_solution()[0]
+    print("Solution: ", solution)
+
     performance = evaluate_solution(solution)
     print("Evaluation descriptive stats: ")
     describe_performance(performance)
 
-    # Reset the environment
-    for env in envs:
-        env.reset(seed=(env.seed + num_eval_envs))
+    reset_environments()
+
+def reset_environments():
+    global greedy_rewards, num_envs, envs, theoretical_rewards, patient_rewads
+
+    random_seeds = np.random.randint(0, 2**32 - 1, size=len(envs)).tolist()
+    envs = [
+        PrioritySelectionPairedKidneyDonationEnv(
+            n_agents=n_agents,
+            n_timesteps=n_timesteps,
+            death_time=death_time,
+            seed=i,
+            p=p,
+            q=q,
+            pct_hard=pct_hard
+        )
+        for i in random_seeds
+    ]
     
-    # Recalculate the greedy reward baselines
     greedy_rewards = []
     for env in tqdm(envs, desc="Environments"):
         greedy_rewards.append(env.get_greedy_percentage())
     greedy_rewards = np.array(greedy_rewards)
+    print(f"Greedy rewards: {greedy_rewards}")
+
+    theoretical_rewards = []
+    for env in tqdm(envs, desc="Environments"):
+        theoretical_rewards.append(env.calculate_theoretical_max())
+    theoretical_rewards = np.array(theoretical_rewards)
+    print(f"Theoretical rewards: {theoretical_rewards}")
+
+    patient_rewards = []
+    for env in tqdm(envs, desc="Environments"):
+        patient_rewards.append(env.get_patient_percentage())
+    patient_rewards = np.array(patient_rewards)
+    print(f"Patient rewards: {patient_rewards}")
 
 if __name__ == "__main__":
-    sol_per_pop = 64
+    sol_per_pop = 24
     num_genes = n_timesteps
 
     init_range_low = 0
     init_range_high = 2**6 - 1
-    mutation_percent_genes = 25
+    mutation_percent_genes = 10
 
-    num_generations = 32
+    num_generations = 16
     num_parents_mating = sol_per_pop // 2
 
     # initial_population = np.ones((sol_per_pop, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)    
     
-    random_population = np.random.randint(init_range_low, init_range_high + 1, size=(sol_per_pop // 2, n_timesteps))
-    greedy_population = np.ones((sol_per_pop // 2, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)
-    initial_population = np.vstack((random_population, greedy_population))
+    greedy_population = np.ones((sol_per_pop // 4, n_timesteps)) * (2**6 - 1) # select everything all the time (greedy)
+    
+    batched_population_4 = np.zeros((sol_per_pop // 4, n_timesteps))
+    for i in range(0, n_timesteps, 4):
+        batched_population_4[:, i] = (2 ** 6 - 1)
+
+    batched_population_6 = np.zeros((sol_per_pop // 4, n_timesteps))
+    for i in range(0, n_timesteps, 6):
+        batched_population_6[:, i] = (2 ** 6 - 1)
+
+    patient_population = np.ones((sol_per_pop // 4, n_timesteps)) * (2 ** 2 + 2**5)
+
+    initial_population = np.vstack((greedy_population, batched_population_4, batched_population_6, patient_population))
+
+    reset_environments()
 
     ga_instance = pygad.GA(num_generations=num_generations,
                         num_parents_mating=num_parents_mating, 
@@ -272,7 +329,6 @@ if __name__ == "__main__":
                         gene_type=int,
                         gene_space=list(range(init_range_low, init_range_high + 1)),
                         on_generation=on_generation,
-                        keep_elitism=5
                     )
     ga_instance.run()
 
