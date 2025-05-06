@@ -386,7 +386,7 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
             rx_edges = get_edges_cycles(selected_nodes, matchable_nodes, adj_matrix)
             graph.add_edges_from(rx_edges)
 
-            edge_add_time = time.perf_counter() - start_time - adj_matrix_time
+            edge_add_time = time.perf_counter() - start_time
 
             while True:
                 current_cycle = rx.digraph_find_cycle(graph)

@@ -29,7 +29,7 @@ pct_hard = 0.8
 num_envs = 16
 num_eval_envs = 128
 eval_freq = 2048
-total_timesteps = 500000
+total_timesteps = 1000000
 
 # Create environment seeds
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
@@ -281,6 +281,12 @@ if __name__ == "__main__":
         eval_greedy_rewards.append(env.env.get_greedy_percentage())
     eval_greedy_rewards = np.array(eval_greedy_rewards)
     
+    # Get patient rewards for evaluation comparison
+    eval_patient_rewards = []
+    for env in tqdm(eval_envs, desc="Computing patient baselines"):
+        eval_patient_rewards.append(env.env.get_patient_percentage())
+    eval_patient_rewards = np.array(eval_patient_rewards)
+    
     # Define model
     model = PPO(
         policy="MlpPolicy",  # For flat vectors
@@ -322,13 +328,48 @@ if __name__ == "__main__":
     best_model = PPO.load("results/best_kidney_model_flat")
     
     # Perform final evaluation
-    eval_ratios = evaluate_solution(best_model, eval_envs, eval_greedy_rewards)
+    model_rewards = evaluate_solution(best_model, eval_envs, eval_greedy_rewards)
     
-    print("Final evaluation stats:")
-    describe_performance(eval_ratios)
+    # Calculate ratios compared to greedy and patient methods
+    greedy_ratios = model_rewards
+    patient_ratios = np.array([np.sum(env.env.matched_agents) / env.env.n_agents for env in eval_envs]) / eval_patient_rewards
     
-    print(f"Final eval ratios: {eval_ratios}")
-    plt.title("Flattened Model Performance Ratios")
-    plt.boxplot(eval_ratios)
+    print("Evaluation against greedy strategy:")
+    describe_performance(greedy_ratios)
+    
+    print("\nEvaluation against patient strategy:")
+    describe_performance(patient_ratios)
+    
+    # Plot both comparisons
+    plt.figure(figsize=(12, 6))
+    
+    plt.subplot(1, 2, 1)
+    plt.title("Model vs Greedy Strategy")
+    plt.boxplot(greedy_ratios)
+    plt.ylabel("Performance Ratio")
+    plt.grid(axis='y')
+    
+    plt.subplot(1, 2, 2)
+    plt.title("Model vs Patient Strategy")
+    plt.boxplot(patient_ratios)
+    plt.ylabel("Performance Ratio")
+    plt.grid(axis='y')
+    
+    plt.tight_layout()
+    plt.savefig("results/rl_performance_comparisons.png")
+    
+    # Also include the original plot for backward compatibility
+    plt.figure()
+    plt.title("Flattened Model Performance Ratios (vs Greedy)")
+    plt.boxplot(greedy_ratios)
     plt.savefig("results/rl_schedule_ratios_flat.png")
+    
+    # Plot with both methods for comparison
+    plt.figure(figsize=(10, 6))
+    plt.boxplot([greedy_ratios, patient_ratios], labels=["vs Greedy", "vs Patient"])
+    plt.title("Model Performance vs Different Strategies")
+    plt.ylabel("Performance Ratio")
+    plt.grid(axis='y')
+    plt.savefig("results/rl_combined_comparison.png")
+    
     plt.show()
