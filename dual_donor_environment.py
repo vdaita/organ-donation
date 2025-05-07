@@ -137,34 +137,49 @@ def toggle_elements(solution, num_changes):
     return new_solution
 
 def score_permutation(solution, groupings):
-    sorted_groupings = [groupings[i] for i in solution] # sorted groupings
-    matched = np.zeros(len(solution), dtype=bool)
-    for i in range(len(sorted_groupings)):
-        no_matched_elements = True
-        for j in sorted_groupings[i]:
-            if j in matched:
-                no_matched_elements = False
+    sorted_groupings = [groupings[i] for i in solution]  # sorted groupings
+    matched = set()
+    total_triplets_matched = 0
+    
+    for group in sorted_groupings:
+        # Check if any triplet in this group is already matched
+        group_valid = True
+        for triplet in group:
+            if triplet in matched:
+                group_valid = False
                 break
-        if not no_matched_elements:
-            continue
         
-        # check if the grouping is viable
-        for j in sorted_groupings[i]:
-            matched[j] = True
-        else:
-            break
-    return np.sum(matched.astype(int)) / len(solution)
+        # If no conflicts, mark all triplets in this group as matched
+        if group_valid:
+            for triplet in group:
+                matched.add(triplet)
+            total_triplets_matched += len(group)
+    
+    # Return the fraction of triplets matched out of total triplets
+    return total_triplets_matched / (n_agents if n_agents > 0 else 1)
 
 def score_toggles(solution, groupings):
-    matched = np.zeros(len(solution), dtype=bool)
+    # Create a matched array with the size of triplets (n_agents), not groupings
+    matched = set()
+    total_triplets_matched = 0
+    
     for used, group in zip(solution, groupings):
         if used:
-            for j in group:
-                if matched[j]:
-                    return -1
-            for j in group:
-                matched[j] = True
-    return np.sum(matched.astype(int)) / len(solution)
+            # Check if any triplet in this group is already matched
+            group_valid = True
+            for triplet in group:
+                if triplet in matched:
+                    group_valid = False
+                    break
+            
+            # If no conflicts, mark all triplets in this group as matched
+            if group_valid:
+                for triplet in group:
+                    matched.add(triplet)
+                total_triplets_matched += len(group)
+    
+    # Return the fraction of triplets matched
+    return total_triplets_matched / (n_agents if n_agents > 0 else 1)
 
 def generate_solutions_toggles(solutions, groupings, scores, elitism_keep=5, num_changes=5, pop_size=50):
     # Keep best solutions from previous generation
