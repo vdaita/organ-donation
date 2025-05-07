@@ -373,9 +373,10 @@ def get_edges(selected_nodes, matchable_nodes, adj_matrix):
     return edges
 
 class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, use_negative_rewards=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.action_space = gym.spaces.MultiBinary(self.n_agents)
+        self.use_negative_rewards = use_negative_rewards
 
     def match_subgraph(self, selected_nodes, matchable_nodes, adj_matrix):
         start_time = time.perf_counter()
@@ -437,6 +438,12 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
         
         current_matched = np.sum(self.matched_agents)
         reward = (current_matched - previous_matched) / self.n_agents
+
+        if self.use_negative_rewards:
+            # how many people departed today
+            unmatched_departure_ratio = np.sum((self.real_departure_times == self.current_step) * (1 - self.matched_agents)) / self.n_agents
+            reward -= unmatched_departure_ratio
+
         return self.get_observation(), reward, done, {}, {}
     
 

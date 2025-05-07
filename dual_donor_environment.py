@@ -5,6 +5,7 @@ import time
 import random
 import networkx as nx
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 seed = 42
 np.random.seed(seed)
@@ -213,9 +214,10 @@ def generate_solution_permutations(solutions, groupings, scores, elitism_keep=5,
     
     return new_solutions, new_scores
 
+
 if __name__ == "__main__":
     # Create environments
-    num_environments = 5
+    num_environments = 16  # Changed from 5 to 16 as requested
     generations = 50
     environments = [create_environment(n_agents) for _ in range(num_environments)]
     toggle_results = []
@@ -243,3 +245,28 @@ if __name__ == "__main__":
     print(f"Toggle method average: {np.mean(toggle_results):.4f}")
     print(f"Permutation method average: {np.mean(permutation_results):.4f}")
     print(f"Better method: {'Toggle' if np.mean(toggle_results) > np.mean(permutation_results) else 'Permutation'}")
+    
+    # Graph the results
+    fig, ax = plt.subplots(figsize=(12, 6))
+    x = np.arange(num_environments)
+    width = 0.35
+    
+    # Create bars
+    toggle_bars = ax.bar(x - width/2, toggle_results, width, label='Toggle Method')
+    perm_bars = ax.bar(x + width/2, permutation_results, width, label='Permutation Method')
+    
+    # Add horizontal lines for averages
+    ax.axhline(y=np.mean(toggle_results), color='blue', linestyle='--', alpha=0.7, label='Toggle Average')
+    ax.axhline(y=np.mean(permutation_results), color='orange', linestyle='--', alpha=0.7, label='Permutation Average')
+    
+    # Add labels and title
+    ax.set_xlabel('Environment Index')
+    ax.set_ylabel('Performance (fraction of triplets matched)')
+    ax.set_title('Comparison of Optimization Methods Across Environments')
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(i) for i in range(num_environments)])
+    ax.legend()
+    
+    plt.tight_layout()
+    plt.savefig('results/dual_donor_optimization_comparison.png')
+    plt.show()

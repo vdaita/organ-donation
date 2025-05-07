@@ -21,15 +21,19 @@ random.seed(seed)
 n_agents = 100
 n_timesteps = 64
 death_time = 32
-p = 0.3
-q = 0.15
-pct_hard = 0.8
+p = 0.15
+q = 0.3
+pct_hard = 0.6
 
 # Training and evaluation parameters
 num_envs = 16
 num_eval_envs = 128
 eval_freq = 2048
 total_timesteps = 2000000
+
+# Determine if negative rewards should be used or not
+use_negative_rewards = True
+
 
 # Create environment seeds
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
@@ -172,7 +176,8 @@ def make_env(seed, rank=0):
             seed=seed,
             p=p,
             q=q,
-            pct_hard=pct_hard
+            pct_hard=pct_hard,
+            use_negative_rewards=use_negative_rewards
         )
         env = FlatKidneyDonationEnvWrapper(env)
         env = Monitor(env)
@@ -253,7 +258,14 @@ def describe_performance(performance):
 
 if __name__ == "__main__":
     # Create results directory if it doesn't exist
-    os.makedirs("results", exist_ok=True)
+    folder_name = f"results/"
+    if use_negative_rewards:
+        folder_name += "with_negative_rewards_"
+    else:
+        folder_name += "no_negative_rewards_"
+    hard_pct_num = (int) (pct_hard * 100)
+    folder_name += f"p_{p}_q_{q}_pct_hard_{hard_pct_num}/"
+    os.makedirs(folder_name, exist_ok=True)
     
     # Create vectorized environments for training
     # Using DummyVecEnv instead of SubprocVecEnv for better error reporting
@@ -269,7 +281,8 @@ if __name__ == "__main__":
                 seed=i,
                 p=p,
                 q=q,
-                pct_hard=pct_hard
+                pct_hard=pct_hard,
+                use_negative_rewards=use_negative_rewards
             )
         )
         for i in eval_env_seeds
@@ -322,10 +335,10 @@ if __name__ == "__main__":
     )
     
     # Save the final model
-    model.save("results/final_kidney_model_flat")
+    model.save(f"{folder_name}/final_kidney_model_flat")
     
     # Load the best model for final evaluation
-    best_model = PPO.load("results/best_kidney_model_flat")
+    best_model = PPO.load(f"{folder_name}/best_kidney_model_flat")
     
     # Perform final evaluation
     model_rewards = evaluate_solution(best_model, eval_envs, eval_greedy_rewards)
@@ -356,13 +369,13 @@ if __name__ == "__main__":
     plt.grid(axis='y')
     
     plt.tight_layout()
-    plt.savefig("results/rl_performance_comparisons.png")
+    plt.savefig(f"{folder_name}/rl_performance_comparisons.png")
     
     # Also include the original plot for backward compatibility
     plt.figure()
     plt.title("Flattened Model Performance Ratios (vs Greedy)")
     plt.boxplot(greedy_ratios)
-    plt.savefig("results/rl_schedule_ratios_flat.png")
+    plt.savefig(f"{folder_name}/rl_schedule_ratios_flat.png")
     
     # Plot with both methods for comparison
     plt.figure(figsize=(10, 6))
@@ -370,6 +383,6 @@ if __name__ == "__main__":
     plt.title("Model Performance vs Different Strategies")
     plt.ylabel("Performance Ratio")
     plt.grid(axis='y')
-    plt.savefig("results/rl_combined_comparison.png")
+    plt.savefig(f"{folder_name}/rl_combined_comparison.png")
     
     plt.show()
