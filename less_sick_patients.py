@@ -32,12 +32,13 @@ class LessSickPairedKidneyDonationEnv(PrioritySelectionPairedKidneyDonationEnv):
         obs = super().get_observation()
         return obs
 
-    def get_greedy_percentage(self):
+    def get_greedy_percentage(self, with_prioritization=False):
         obs, _ = self.start_over()
         done = False
         while not done:
             action = np.ones(self.n_agents)
-            action[np.where(self.is_less_sick == 1)] = 0
+            if with_prioritization:
+                action[np.where(self.is_less_sick == 1)] = 0
             obs, reward, done, _, _ = self.step(action)
         total_reward = np.sum(self.matched_agents) / self.n_agents
         return total_reward, self.get_sick_matched()
@@ -84,10 +85,15 @@ if __name__ == "__main__":
             for i in range(num_envs)
         ]
 
-        stats[f"{pct_less_sick}x_less_sick"] = []
+        stats[f"{pct_less_sick}x_less_sick_with_prioritization"] = []
         for env in tqdm(less_sick_envs, desc="Environments", leave=False):
-            total_reward, sick_matched = env.get_greedy_percentage()
-            stats[f"{pct_less_sick}x_less_sick"].append(sick_matched)
+            total_reward, sick_matched = env.get_greedy_percentage(with_prioritization=True)
+            stats[f"{pct_less_sick}x_less_sick_with_prioritization"].append(sick_matched)
+
+        stats[f"{pct_less_sick}x_less_sick_without_prioritization"] = []
+        for env in tqdm(less_sick_envs, desc="Environments", leave=False):
+            total_reward, sick_matched = env.get_greedy_percentage(with_prioritization=False)
+            stats[f"{pct_less_sick}x_less_sick_without_prioritization"].append(sick_matched)
     
     for env in tqdm(regular_envs, desc="Regular envs"):
         stats["regular"].append(env.get_greedy_percentage())
@@ -101,14 +107,33 @@ if __name__ == "__main__":
 
     # Collect data for each less sick percentage
     for pct_less_sick in pct_less_sick_values:
-        key = f"{pct_less_sick}x_less_sick"
-        labels.append(f"{int(pct_less_sick*100)}% less sick")
-        data.append(stats[key])
+        key_no_prio = f"{pct_less_sick}x_less_sick_without_prioritization"
+        key_prio = f"{pct_less_sick}x_less_sick_with_prioritization"
+        labels.append(f"{int(pct_less_sick*100)}% less sick\nno prioritization")
+        data.append(stats[key_no_prio])
+        labels.append(f"{int(pct_less_sick*100)}% less sick\nwith prioritization")
+        data.append(stats[key_prio])
 
-    plt.figure(figsize=(10, 6))
-    plt.boxplot(data, labels=labels, patch_artist=True)
+    plt.figure(figsize=(14, 7))
+    box = plt.boxplot(
+        data, 
+        labels=labels, 
+        patch_artist=True, 
+        widths=0.5, 
+        showfliers=False
+    )
+
+    # Color alternate boxes for clarity
+    colors = ['#8ecae6', '#219ebc'] * (len(labels)//2 + 1)
+    for patch, color in zip(box['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+
     plt.ylabel("Fraction of Sick Patients Matched")
     plt.title("Sick Patients Matched vs. Fraction of Less Sick Patients in Market")
-    plt.grid(axis='y')
-    plt.tight_layout()
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
+    plt.xticks(rotation=20, ha='right')
+    plt.tight_layout(pad=2)
+    plt.subplots_adjust(bottom=0.18)
+    plt.savefig("results/less_sick_patients.png", dpi=300)
     plt.show()
