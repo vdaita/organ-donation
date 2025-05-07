@@ -1,21 +1,230 @@
-from gymnasium import gym
 import numpy as np
 import networkx as nx
 from gymnasium.spaces import Graph, MultiBinary, Dict, Box, Discrete, MultiDiscrete
 import time
+import random
+import networkx as nx
+from tqdm import tqdm
 
-class DualDonorPairedKidneyDonationEnv(gym.Env):
-    def __init__(
-        self,
-        n_agents: int = 100,
-        n_timesteps: int = 64,
-        departure_time_avg: int = 8,
-        departure_time_std: float = 2
-    ):
-        super(DualDonorPairedKidneyDonationEnv, self).__init__()
-        self.n_agents = n_agents
-        self.n_timesteps = n_timesteps
-        self.departure_time_avg = departure_time_avg
-        self.departure_time_std = departure_time_std
+seed = 42
+np.random.seed(seed)
+random.seed(seed)
 
+ttn = {
+    1: "O",
+    2: "A",
+    3: "B",
+    4: "AB"
+}
+ntt = { v: k for k, v in ttn.items() }
+
+blood_type_distribution = {
+    1: 0.25,
+    2: 0.25,
+    3: 0.25,
+    4: 0.25
+}
+can_give = {
+    1: [1, 3],
+    2: [2, 3],
+    3: [3],
+    4: [1, 2, 3, 4]
+}
+
+n_agents = 50
+
+def get_random_blood_type():
+    return np.random.choice(list(blood_type_distribution.keys()), p=list(blood_type_distribution.values()))
+
+def create_environment(n_agents):
+    triplets = []
+    for i in range(n_agents):
+        p = get_random_blood_type()
+        d1 = get_random_blood_type()
+        d2 = get_random_blood_type()
+        triplets.append((p, d1, d2))
+    return triplets
+
+def is_grouping_viable(grouping):
+    donors = [groups[1] for groups in grouping] + [group[2] for group in grouping]
+    recipients = [group[0] for group in grouping]
+    donors, recipients = np.array(donors), np.array(recipients)
+
+    a_count = np.sum(donors == ntt["A"])
+    b_count = np.sum(donors == ntt["B"])
+    ab_count = np.sum(donors == ntt["AB"])
+    o_count = np.sum(donors == ntt["O"])
+
+    donor_counts = np.array([0, a_count, b_count, ab_count, o_count])
+    
+    # check o type
+    donor_counts[ntt["O"]] -= np.sum(recipients == ntt["O"])
+    if donor_counts[ntt["O"]] < 0:
+        return False
+
+    # Remove A-type recipients: first from A donors, then from O donors
+    a_needed = np.sum(recipients == ntt["A"])
+    take_from_a = min(donor_counts[ntt["A"]], a_needed)
+    donor_counts[ntt["A"]] -= take_from_a
+    a_needed -= take_from_a
+    donor_counts[ntt["O"]] -= a_needed
+    if donor_counts[ntt["O"]] < 0:
+        return False
+
+    # Remove B-type recipients: first from B donors, then from O donors
+    b_needed = np.sum(recipients == ntt["B"])
+    take_from_b = min(donor_counts[ntt["B"]], b_needed)
+    donor_counts[ntt["B"]] -= take_from_b
+    b_needed -= take_from_b
+    donor_counts[ntt["O"]] -= b_needed
+    if donor_counts[ntt["O"]] < 0:
+        return False
+    
+    # Remove AB-type recipients: first from AB donors, then from A and B donors, then from O donors
+    ab_needed = np.sum(recipients == ntt["AB"])
+    take_from_ab = min(donor_counts[ntt["AB"]], ab_needed)
+    donor_counts[ntt["AB"]] -= take_from_ab
+    ab_needed -= take_from_ab
+    take_from_a = min(donor_counts[ntt["A"]], ab_needed)
+    donor_counts[ntt["A"]] -= take_from_a
+    ab_needed -= take_from_a
+    take_from_b = min(donor_counts[ntt["B"]], ab_needed)
+    donor_counts[ntt["B"]] -= take_from_b
+    ab_needed -= take_from_b
+    donor_counts[ntt["O"]] -= ab_needed
+    if donor_counts[ntt["O"]] < 0:
+        return False
+    
+    return True
+
+def find_valid_groupings(triplets):
+    # produce a list of all possible groupings of 2/3 elements
+    pairs = []
+    for i in range(len(triplets)):
+        for j in range(i + 1, len(triplets)):
+            if not i == j:
+                grouping = [triplets[i], triplets[j]]
+                if is_grouping_viable(grouping):
+                    pairs.append(grouping)
+    triples = []
+    for i in range(len(triplets)):
+        for j in range(i + 1, len(triplets)):
+            for k in range(j + 1, len(triplets)):
+                if not i == j and not i == k and not j == k:
+                    # check if the triplet is viable
+                    grouping = [triplets[i], triplets[j], triplets[k]]
+                    if is_grouping_viable(grouping):
+                        triples.append(grouping)
+
+    groupings = pairs + triples
+    return groupings
+
+def permute_grouping(solution, num_changes):
+    new_solution = solution.copy()
+
+    for _ in range(num_changes):
+        swap_i = np.random.randint(0, len(solution))
+        swap_j = np.random.randint(0, len(solution))
+        new_solution[swap_i], new_solution[swap_j] = new_solution[swap_j], new_solution[swap_i]
+
+    return new_solution
+
+def toggle_elements(solution, num_changes):
+    # select num_changes indices to toggle out of len(solution)
+    indices = np.random.choice(len(solution), num_changes, replace=False)
+    new_solution = solution.copy()
+    new_solution[indices] = 1 - new_solution[indices]
+    return new_solution
+
+def score_permutation(solution, groupings):
+    sorted_groupings = [groupings[i] for i in solution] # sorted groupings
+    matched = np.zeros(len(solution), dtype=bool)
+    for i in range(len(sorted_groupings)):
+        no_matched_elements = True
+        for j in sorted_groupings[i]:
+            if j in matched:
+                no_matched_elements = False
+                break
+        if not no_matched_elements:
+            continue
         
+        # check if the grouping is viable
+        for j in sorted_groupings[i]:
+            matched[j] = True
+        else:
+            break
+    return np.sum(matched.astype(int)) / len(solution)
+
+def score_toggles(solution, groupings):
+    matched = np.zeros(len(solution), dtype=bool)
+    for used, group in zip(solution, groupings):
+        if used:
+            for j in group:
+                if matched[j]:
+                    return -1
+            for j in group:
+                matched[j] = True
+    return np.sum(matched.astype(int)) / len(solution)
+
+def generate_solutions_toggles(solutions, groupings, scores, elitism_keep=5, num_changes=5, pop_size=50):
+    # Keep best solutions from previous generation
+    elite_indices = np.argsort(scores)[-elitism_keep:]
+    new_solutions = [solutions[i] for i in elite_indices]
+    new_scores = [scores[i] for i in elite_indices]
+    
+    # Generate new solutions
+    while len(new_solutions) < pop_size:
+        parent_idx = np.random.choice(len(solutions), p=np.maximum(scores, 0)/max(sum(np.maximum(scores, 0)), 1e-10))
+        child = toggle_elements(solutions[parent_idx], num_changes)
+        child_score = score_toggles(child, groupings)
+        new_solutions.append(child)
+        new_scores.append(child_score)
+    
+    return new_solutions, new_scores
+
+def generate_solution_permutations(solutions, groupings, scores, elitism_keep=5, num_changes=5, pop_size=50):
+    # Keep best solutions from previous generation
+    elite_indices = np.argsort(scores)[-elitism_keep:]
+    new_solutions = [solutions[i] for i in elite_indices]
+    new_scores = [scores[i] for i in elite_indices]
+    
+    # Generate new solutions
+    while len(new_solutions) < pop_size:
+        parent_idx = np.random.choice(len(solutions), p=np.maximum(scores, 0)/max(sum(np.maximum(scores, 0)), 1e-10))
+        child = permute_grouping(solutions[parent_idx], num_changes)
+        child_score = score_permutation(child, groupings)
+        new_solutions.append(child)
+        new_scores.append(child_score)
+    
+    return new_solutions, new_scores
+
+if __name__ == "__main__":
+    # Create environments
+    num_environments = 5
+    generations = 50
+    environments = [create_environment(n_agents) for _ in range(num_environments)]
+    toggle_results = []
+    permutation_results = []
+    
+    for env_idx, triplets in enumerate(tqdm(environments)):
+        # Get valid groupings
+        groupings = find_valid_groupings(triplets)
+        
+        # Optimize with toggles
+        toggle_solutions = [np.random.randint(0, 2, size=len(groupings)) for _ in range(50)]
+        toggle_scores = [score_toggles(sol, groupings) for sol in toggle_solutions]
+        for _ in tqdm(range(generations), desc="Toggle generations"):
+            toggle_solutions, toggle_scores = generate_solutions_toggles(toggle_solutions, groupings, toggle_scores)
+        toggle_results.append(max(toggle_scores))
+        
+        # Optimize with permutations
+        perm_solutions = [np.random.permutation(len(groupings)) for _ in range(50)]
+        perm_scores = [score_permutation(sol, groupings) for sol in perm_solutions]
+        for _ in tqdm(range(generations), desc="Permutation generations"):
+            perm_solutions, perm_scores = generate_solution_permutations(perm_solutions, groupings, perm_scores)
+        permutation_results.append(max(perm_scores))
+    
+    # Aggregate results
+    print(f"Toggle method average: {np.mean(toggle_results):.4f}")
+    print(f"Permutation method average: {np.mean(permutation_results):.4f}")
+    print(f"Better method: {'Toggle' if np.mean(toggle_results) > np.mean(permutation_results) else 'Permutation'}")
