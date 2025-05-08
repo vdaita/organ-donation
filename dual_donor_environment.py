@@ -19,11 +19,11 @@ ttn = {
 }
 ntt = { v: k for k, v in ttn.items() }
 
-blood_type_distribution = {
-    1: 0.25,
-    2: 0.25,
-    3: 0.25,
-    4: 0.25
+blood_type_distribution = { # borrowed from Ergin, Sonmez, and Umver
+    1: 0.3,
+    2: 0.4,
+    3: 0.2,
+    4: 0.1
 }
 can_give = {
     1: [1, 3],
@@ -226,6 +226,7 @@ if __name__ == "__main__":
     for env_idx, triplets in enumerate(tqdm(environments)):
         # Get valid groupings
         groupings = find_valid_groupings(triplets)
+        print("Number of valid groupings: ", len(groupings))
         
         # Optimize with toggles
         toggle_solutions = [np.random.randint(0, 2, size=len(groupings)) for _ in range(50)]

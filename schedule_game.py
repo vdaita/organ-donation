@@ -56,7 +56,6 @@ eval_envs = [
     for i in eval_env_seeds
 ]
 
-
 eval_greedy_rewards = []
 for env in tqdm(eval_envs, desc="Evaluation envs"):
     eval_greedy_rewards.append(env.get_greedy_percentage())

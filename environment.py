@@ -334,6 +334,12 @@ class PairedKidneyDonationEnv(gym.Env):
             reward += new_reward
         return (np.sum(self.matched_agents) / self.n_agents)
     
+    def get_waiting_time(self):
+        waiting_times = self.time_matched - self.arrival_times
+        hard_waiting_times = waiting_times[self.is_hard_to_match == 1]
+        easy_waiting_times = waiting_times[self.is_hard_to_match == 0]
+
+        return hard_waiting_times[hard_waiting_times > 0], easy_waiting_times[easy_waiting_times > 0]
 
     def get_percentage(self):
         return sum(self.matched_agents) / self.n_agents
@@ -454,7 +460,10 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
             action = np.ones(self.n_agents)
             obs, reward, done, _, _ = self.step(action)
         total_reward = np.sum(self.matched_agents) / self.n_agents
-        return total_reward
+
+        hard_waiting, easy_waiting = self.get_waiting_time()
+
+        return total_reward, hard_waiting, easy_waiting
 
     def get_patient_percentage(self):
         obs, _ = self.start_over()
@@ -466,4 +475,7 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
                     action[i] = 1
             obs, reward, done, _, _ = self.step(action)
         total_reward = np.sum(self.matched_agents) / self.n_agents
-        return total_reward
+
+        hard_waiting, easy_waiting = self.get_waiting_time()
+
+        return total_reward, hard_waiting, easy_waiting
