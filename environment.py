@@ -438,7 +438,6 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
         current_matched = np.sum(self.matched_agents)
         reward = (current_matched - previous_matched) / self.n_agents
         return self.get_observation(), reward, done, {}, {}
-    
 
     def get_greedy_percentage(self):
         obs, _ = self.start_over()
@@ -460,3 +459,11 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
             obs, reward, done, _, _ = self.step(action)
         total_reward = np.sum(self.matched_agents) / self.n_agents
         return total_reward
+    
+    def get_hard_waiting_time(self):
+        hard_waiting_times = self.time_matched[self.is_hard_to_match == 1] - self.arrival_times[self.is_hard_to_match == 1]
+        return hard_waiting_times[hard_waiting_times > 0]
+    
+    def get_easy_waiting_time(self):
+        easy_waiting_times = self.time_matched[self.is_hard_to_match == 0] - self.arrival_times[self.is_hard_to_match == 0]
+        return easy_waiting_times[easy_waiting_times > 0]
