@@ -3,6 +3,18 @@ import numpy as np
 import rustworkx as rx
 from typing import Optional
 from gymnasium.spaces import Discrete, MultiBinary, Dict, Box
+from tqdm import tqdm
+import os
+import matplotlib.pyplot as plt
+
+num_envs = 128
+n_agents = 100
+n_timesteps = 128
+death_time = 64
+p = 0.037
+q = 0.087
+pct_hard = 0.6
+warning_means = [4, 8, 16, 32]
 
 def do_ranges_overlap(range1, range2):
     return not (range1[1] < range2[0] or range2[1] < range1[0])
@@ -78,9 +90,6 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         # current graph: includes nodes that are already in the exchange
         self.current_graph = rx.PyGraph()
 
-        self.waiting_graph.add_nodes_from(range(self.n_agents))
-        self.current_graph.add_nodes_from(range(self.n_agents))
-
         return self._get_observation(), {}
 
     def step(self, action): # 1 if using the waiting graph, 0 if using the current graph
@@ -99,43 +108,50 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
             arrival_2 = self.arrivals[node2]
             departure_2 = self.departures[node2]
 
+            nodes = [node1, node2]
+
             if self.current_step >= arrival_1 and self.current_step <= departure_1:
                 if self.current_step >= arrival_2 and self.current_step <= departure_2:
-                    self.matched_agents[node1] = 1
-                    self.matched_agents[node2] = 1
-                    self.active_agents[node1] = 0
-                    self.active_agents[node2] = 0
-                    self.time_matched[node1] = self.current_step
-                    self.time_matched[node2] = self.current_step
+                    for node in nodes:
+                        self.matched_agents[node] = 1
+                        self.active_agents[node] = 0
+                        self.waiting_agents[node] = 0
+                        self.time_matched[node] = self.current_step
 
-                    self.waiting_graph.remove_node(node1)
-                    self.current_graph.remove_node(node1)
+                        self.waiting_graph.remove_node(node)
+                        self.current_graph.remove_node(node)
 
         # check arrivals to the waiting graph
         waiting_arrivals = np.where(self.knowledge == self.current_step)[0]
         for waiting_arrival_node in waiting_arrivals:
             compatible_nodes = np.where(self.compat[waiting_arrival_node] == 1)[0]
+            self.waiting_graph.add_node(waiting_arrival_node)
             for compat_node in compatible_nodes:
                 if self.compat[compat_node, waiting_arrival_node] == 1:
                     waiting_node_range = [self.arrivals[waiting_arrival_node], self.departures[waiting_arrival_node]]
                     compat_node_range = [self.arrivals[compat_node], self.departures[compat_node]]
-                    if do_ranges_overlap(waiting_node_range, compat_node_range):
-                        self.waiting_graph.add_edge(waiting_arrival_node, compat_node)
+                    if self.waiting_agents[compat_node] == 1:
+                        if do_ranges_overlap(waiting_node_range, compat_node_range):
+                            self.waiting_graph.add_edge(waiting_arrival_node, compat_node)
+            self.waiting_agents[waiting_arrival_node] = 1
 
         # check arrivals to the current graph
         arrivals = np.where(self.arrivals == self.current_step)[0] 
         for arrival_node in arrivals:
             compatible_nodes = np.where(self.compat[arrival_node] == 1)[0]
+            self.current_graph.add_node(arrival_node)
             for compat_node in compatible_nodes:
                 if self.compat[compat_node, arrival_node] == 1:
-                    self.current_graph.add_edge(arrival_node, compat_node)
-        self.active_agents[arrivals] = 1
+                    if self.active_agents[compat_node] == 1:
+                        self.current_graph.add_edge(arrival_node, compat_node)
+            self.active_agents[arrival_node] = 1
 
         # checking departures from the waiting and current graphs
         departures = np.where(self.departures == self.current_step)[0] 
-        self.waiting_graph.remove_nodes_from(departures)
-        self.current_graph.remove_nodes_from(departures)
+        self.waiting_graph.remove_nodes_from([departure_node for departure_node in departures if self.waiting_agents[departure_node] == 1])
+        self.current_graph.remove_nodes_from([departure_node for departure_node in departures if self.active_agents[departure_node] == 1])
         self.active_agents[departures] = 0
+        self.waiting_agents[departures] = 0
 
         self.current_step += 1
 
@@ -143,7 +159,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
     
     def _is_done(self):
         return self.current_step >= self.n_timesteps
-
+    
     def _get_observation(self):
         return {
             "waiting_graph": self.waiting_graph,
@@ -164,3 +180,67 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
             obs, reward, done, _ = self.step(action)
         return reward
     
+envs = [
+    AdvanceKnowledgeSimulationEnvironment(
+        n_agents=n_agents,
+        n_timesteps=n_timesteps,
+        death_time=death_time,
+        p=p,
+        q=q,
+        pct_hard=pct_hard
+    )
+    for _ in range(num_envs)
+]
+
+rewards = {
+    "regular": []
+}
+
+ratios = {
+    "regular": []
+}
+
+for env in tqdm(envs):
+    env.reset()
+
+    regular_reward = env.compute_reward(use_waiting_graph=False)
+    rewards["regular"].append(regular_reward)
+    ratios["regular"].append(1)
+
+    for warning_mean in tqdm(warning_means):
+        env.warning_mean = warning_mean
+        env.reset(seed=env.seed)
+
+        if not f"warning_mean_{warning_mean}" in rewards:
+            rewards[f"warning_mean_{warning_mean}"] = []
+        if not f"warning_mean_{warning_mean}" in ratios:
+            ratios[f"warning_mean_{warning_mean}"] = []
+
+        waiting_reward = env.compute_reward(use_waiting_graph=True)
+        rewards[f"warning_mean_{warning_mean}"].append(waiting_reward)
+        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward)
+
+# Plotting the results
+results_dir = "results/advance_knowledge"
+os.makedirs(results_dir, exist_ok=True)
+
+plt.figure(figsize=(10, 6))
+plt.boxplot(
+    [rewards["regular"]] + [rewards[f"warning_mean_{wm}"] for wm in warning_means],
+    labels=["regular"] + [f"warning={wm}" for wm in warning_means]
+)
+plt.ylabel("Reward")
+plt.title("Reward Distribution for Different Warning Means")
+plt.savefig(f"{results_dir}/reward_boxplot.png")
+plt.close()
+
+# Plot the ratios
+plt.figure(figsize=(10, 6))
+plt.boxplot(
+    [ratios["regular"]] + [ratios[f"warning_mean_{wm}"] for wm in warning_means],
+    labels=["regular"] + [f"warning={wm}" for wm in warning_means]
+)
+plt.ylabel("Reward Ratio (waiting/regular)")
+plt.title("Reward Ratio Distribution for Different Warning Means")
+plt.savefig(f"{results_dir}/ratio_boxplot.png")
+plt.close()
