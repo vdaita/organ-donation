@@ -18,7 +18,7 @@ np.random.seed(seed)
 num_envs = 32
 
 n_agents = 100
-n_timesteps = 64
+n_timesteps = 128
 death_time = 16
 p = 0.037
 q = 0.087
@@ -98,7 +98,6 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         self.compat[np.ix_(hard_indices, hard_indices)] = 0
         self.compat[np.diag_indices(self.n_agents)] = 0
 
-        self.waiting_agents = np.zeros(self.n_agents)
         self.active_agents = np.zeros(self.n_agents)
         self.matched_agents = np.zeros(self.n_agents)
         self.time_matched = np.ones(self.n_agents) * -1
@@ -106,16 +105,29 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         self.current_step = 0
 
         # waiting graph, current graph
-        self.waiting_graph = nx.Graph()
         self.current_graph = nx.Graph()
 
         return self._get_observation(), {}
 
     def step(self, action):
-        graph = self.waiting_graph if action == 1 else self.current_graph
-        
-        # matches
-        matching = nx.max_weight_matching(graph, maxcardinality=True)
+        graph = self.current_graph.copy()
+        known_inactive_nodes = np.where(
+                (self.knowledge <= self.current_step) & 
+                (self.arrivals >= self.current_step) & 
+                (self.departures > self.current_step)
+            )[0]
+
+        if action == 1:
+            for known_node in known_inactive_nodes:
+                # we know that this node is going to arrive, and might want to hold off
+                known_node_range = (self.arrivals[known_node], self.departures[known_node])
+                for node in graph.nodes:
+                    node_range = (self.arrivals[node], self.departures[node])
+                    if self.compat[known_node, node] == 1 and self.compat[node, known_node] == 1:
+                        if do_ranges_overlap(known_node_range, node_range):
+                            self.current_graph.add_edge(known_node, node)
+
+        matching = nx.max_weight_matching(self.current_graph, maxcardinality=True)
         for node1, node2 in matching:
             # are both nodes currently active right now?
             if self.current_step > self.arrivals[node1] and self.current_step > self.arrivals[node2]:
@@ -126,29 +138,17 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                     self.active_agents[node] = 0
                     if node in self.current_graph.nodes:
                         self.current_graph.remove_node(node)
-                    if node in self.waiting_graph.nodes:
-                        self.waiting_graph.remove_node(node)
 
-        # waiting graph
-        for waiting_node in np.where(self.knowledge == self.current_step)[0]:
-            self.waiting_agents[waiting_node] = 1
-            self.waiting_graph.add_node(waiting_node)
-
-            for compat_node in range(self.n_agents):
-                if self.compat[waiting_node, compat_node] == 1:
-                    if self.compat[compat_node, waiting_node] == 1:
-                        if waiting_node in self.waiting_graph.nodes:
-                            if do_ranges_overlap(
-                                (self.arrivals[waiting_node], self.departures[waiting_node]),
-                                (self.arrivals[compat_node], self.departures[compat_node])
-                            ):
-                                self.waiting_graph.add_edge(waiting_node, compat_node)
+        if action == 1:
+            for known_node in known_inactive_nodes:
+                if known_node in self.current_graph.nodes:
+                    self.current_graph.remove_node(known_node)
+                
 
         # current graph
         for arrival_node in np.where(self.arrivals == self.current_step)[0]:
             self.active_agents[arrival_node] = 1
             self.current_graph.add_node(arrival_node)
-
             for compat_node in range(self.n_agents):
                 if self.compat[arrival_node, compat_node] == 1:
                     if self.compat[compat_node, arrival_node] == 1:
@@ -157,9 +157,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
         # departures
         for depart_node in np.where(self.departures == self.current_step)[0]:
-            self.waiting_agents[depart_node], self.active_agents[depart_node] = 0, 0
-            if depart_node in self.waiting_graph.nodes:
-                self.waiting_graph.remove_node(depart_node)
+            self.active_agents[depart_node] = 0
             if depart_node in self.current_graph.nodes:
                 self.current_graph.remove_node(depart_node)
 
@@ -173,7 +171,6 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
     
     def _get_observation(self):
         return {
-            "waiting_graph": self.waiting_graph,
             "current_graph": self.current_graph,
             "active_agents": self.active_agents,
             "matched_agents": self.matched_agents,
@@ -232,7 +229,7 @@ for env in tqdm(envs):
         waiting_reward = env.compute_reward(use_waiting_graph=True)
         print("Waiting reward: ", warning_mean, waiting_reward)
         rewards[f"warning_mean_{warning_mean}"].append(waiting_reward)
-        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 1)
+        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 0)
 
 # Plotting the results
 results_dir = "results/advance_knowledge"
