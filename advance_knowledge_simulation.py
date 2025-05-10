@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-import rustworkx as rx
+import networkx as nx
 from rustworkx.visualization import mpl_draw
 from typing import Optional
 from gymnasium.spaces import Discrete, MultiBinary, Dict, Box
@@ -9,19 +9,24 @@ import os
 import matplotlib.pyplot as plt
 from rich import print
 import random
+from slugify import slugify
 
 seed = 42
 random.seed(seed)
 np.random.seed(seed)
 
-num_envs = 128
+num_envs = 32
+
 n_agents = 100
-n_timesteps = 128
-death_time = 64
+n_timesteps = 64
+death_time = 16
 p = 0.037
 q = 0.087
 pct_hard = 0.6
-warning_means = [4, 8, 16, 32]
+warning_means = [4, 8, 16]
+
+title_name = f"n_agents={n_agents}, n_timesteps={n_timesteps}, death_time={death_time}, p={p}, q={q}, pct_hard={pct_hard}, n={num_envs}"
+sluggified = slugify(title_name)
 
 def do_ranges_overlap(range1, range2):
     return not (range1[1] < range2[0] or range2[1] < range1[0])
@@ -100,96 +105,69 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
         self.current_step = 0
 
-        # waiting graph: includes nodes that are going to arrive
-        self.waiting_graph = rx.PyGraph() 
-        # current graph: includes nodes that are already in the exchange
-        self.current_graph = rx.PyGraph()
-        
-        self.waiting_indices = [ None ] * self.n_agents
-        self.current_indices = [ None ] * self.n_agents
+        # waiting graph, current graph
+        self.waiting_graph = nx.Graph()
+        self.current_graph = nx.Graph()
 
         return self._get_observation(), {}
 
-    def step(self, action): # 1 if using the waiting graph, 0 if using the current graph
-        # match the agent according to the current graph
-        if action == 1:
-            graph = self.waiting_graph
-        else:
-            graph = self.current_graph
+    def step(self, action):
+        graph = self.waiting_graph if action == 1 else self.current_graph
         
-        # find matching within the graph
-        matching = rx.max_weight_matching(graph, max_cardinality=True)
+        # matches
+        matching = nx.max_weight_matching(graph, maxcardinality=True)
         for node1, node2 in matching:
-            arrival_1 = self.arrivals[node1]
-            departure_1 = self.departures[node1]
-
-            arrival_2 = self.arrivals[node2]
-            departure_2 = self.departures[node2]
-
-            nodes = [node1, node2]
-
-            if self.current_step >= arrival_1 and self.current_step <= departure_1:
-                if self.current_step >= arrival_2 and self.current_step <= departure_2:
-                    for node in nodes:
-                        self.matched_agents[node] = 1
-                        self.active_agents[node] = 0
-                        self.waiting_agents[node] = 0
-                        self.time_matched[node] = self.current_step
-                        self.waiting_indices[node] = None
-                        self.current_indices[node] = None
-
-                        self.waiting_graph.remove_node(node)
+            # are both nodes currently active right now?
+            if self.current_step > self.arrivals[node1] and self.current_step > self.arrivals[node2]:
+                nodes = [node1, node2]
+                for node in nodes:
+                    self.matched_agents[node] = 1
+                    self.time_matched[node] = self.current_step
+                    self.active_agents[node] = 0
+                    if node in self.current_graph.nodes:
                         self.current_graph.remove_node(node)
+                    if node in self.waiting_graph.nodes:
+                        self.waiting_graph.remove_node(node)
+
+        # waiting graph
+        for waiting_node in np.where(self.knowledge == self.current_step)[0]:
+            self.waiting_agents[waiting_node] = 1
+            self.waiting_graph.add_node(waiting_node)
+
+            for compat_node in range(self.n_agents):
+                if self.compat[waiting_node, compat_node] == 1:
+                    if self.compat[compat_node, waiting_node] == 1:
+                        if waiting_node in self.waiting_graph.nodes:
+                            if do_ranges_overlap(
+                                (self.arrivals[waiting_node], self.departures[waiting_node]),
+                                (self.arrivals[compat_node], self.departures[compat_node])
+                            ):
+                                self.waiting_graph.add_edge(waiting_node, compat_node)
+
+        # current graph
+        for arrival_node in np.where(self.arrivals == self.current_step)[0]:
+            self.active_agents[arrival_node] = 1
+            self.current_graph.add_node(arrival_node)
+
+            for compat_node in range(self.n_agents):
+                if self.compat[arrival_node, compat_node] == 1:
+                    if self.compat[compat_node, arrival_node] == 1:
+                        if arrival_node in self.current_graph.nodes:
+                            self.current_graph.add_edge(arrival_node, compat_node)
+
+        # departures
+        for depart_node in np.where(self.departures == self.current_step)[0]:
+            self.waiting_agents[depart_node], self.active_agents[depart_node] = 0, 0
+            if depart_node in self.waiting_graph.nodes:
+                self.waiting_graph.remove_node(depart_node)
+            if depart_node in self.current_graph.nodes:
+                self.current_graph.remove_node(depart_node)
 
         self.current_step += 1
 
-        # check arrivals to the waiting graph
-        waiting_arrivals = np.where(self.knowledge == self.current_step)[0]
-        for waiting_arrival_node in waiting_arrivals:
-            compatible_nodes = np.where(self.compat[waiting_arrival_node] == 1)[0]
-            self.waiting_indices[waiting_arrival_node] = self.waiting_graph.add_node(waiting_arrival_node)
-            self.waiting_agents[waiting_arrival_node] = 1
-            # print("Adding node to waiting graph: ", waiting_arrival_node)
-            # print("Compatible nodes: ", compatible_nodes)
-            for compat_node in compatible_nodes:
-                # print("Found a node that this is compatible with: ", compat_node)
-                if self.compat[compat_node, waiting_arrival_node] == 1:
-                    # print("Reverse direction of compatibility is true: ", compat_node)
-                    waiting_node_range = [self.arrivals[waiting_arrival_node], self.departures[waiting_arrival_node]]
-                    compat_node_range = [self.arrivals[compat_node], self.departures[compat_node]]
-                    if self.waiting_agents[compat_node] == 1:
-                        if do_ranges_overlap(waiting_node_range, compat_node_range):
-                            print("Adding edge to waiting graph: ", waiting_arrival_node, compat_node)
-                            print(waiting_arrival_node in self.waiting_graph.nodes())
-                            print(compat_node in self.waiting_graph.nodes())
-                            self.waiting_graph.add_edge(self.waiting_indices[waiting_arrival_node], self.waiting_indices[compat_node], 1)
-            
-
-        # check arrivals to the current graph
-        arrivals = np.where(self.arrivals == self.current_step)[0] 
-        for arrival_node in arrivals:
-            compatible_nodes = np.where(self.compat[arrival_node] == 1)[0]
-            self.current_indices[arrival_node] = self.current_graph.add_node(arrival_node)
-            self.active_agents[arrival_node] = 1
-
-            for compat_node in compatible_nodes:
-                if self.compat[compat_node, arrival_node] == 1:
-                    if self.active_agents[compat_node] == 1:
-                        self.current_graph.add_edge(self.current_indices[arrival_node], self.current_indices[compat_node], 1)
-            
-
-        # checking departures from the waiting and current graphs
-        departures = np.where(self.departures == self.current_step)[0] 
-        self.waiting_graph.remove_nodes_from([departure_node for departure_node in departures if self.waiting_agents[departure_node] == 1])
-        self.current_graph.remove_nodes_from([departure_node for departure_node in departures if self.active_agents[departure_node] == 1])
-        self.active_agents[departures] = 0
-        self.waiting_agents[departures] = 0
-        for node in departures:
-            self.waiting_indices[node] = None
-            self.current_indices[node] = None
-
         return self._get_observation(), self._get_reward(), self._is_done(), {}
-    
+
+
     def _is_done(self):
         return self.current_step >= self.n_timesteps
     
@@ -242,7 +220,7 @@ for env in tqdm(envs):
 
     print("Regular reward: ", regular_reward)
 
-    for warning_mean in tqdm(warning_means):
+    for warning_mean in tqdm(warning_means, leave=False):
         env.warning_mean = warning_mean
         env.reset(seed=env.seed)
 
@@ -254,7 +232,7 @@ for env in tqdm(envs):
         waiting_reward = env.compute_reward(use_waiting_graph=True)
         print("Waiting reward: ", warning_mean, waiting_reward)
         rewards[f"warning_mean_{warning_mean}"].append(waiting_reward)
-        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward)
+        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 1)
 
 # Plotting the results
 results_dir = "results/advance_knowledge"
@@ -277,7 +255,7 @@ plt.boxplot(
     labels=["regular"] + [f"warning={wm}" for wm in warning_means]
 )
 plt.ylabel("Reward Ratio (waiting/regular)")
-plt.title("Reward Ratio Distribution for Different Warning Means")
-plt.savefig(f"{results_dir}/ratio_boxplot.png")
+plt.title(f"Reward Ratio Distribution for Different Warning Means\n{title_name}")
+plt.savefig(f"{results_dir}/ratio_boxplot_{sluggified}.png")
 plt.show()
 plt.close()
