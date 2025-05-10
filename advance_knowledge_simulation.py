@@ -103,8 +103,8 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
         self.current_step = 0
 
-        # waiting graph, current graph
         self.current_graph = rx.PyGraph()
+        self.node_indices = np.ones(self.n_agents, dtype=int) * -1 # why? i'd rather throw an error if the node is not in the graph rather than deal with unexpected behavior
 
         return self._get_observation(), {}
 
@@ -113,59 +113,69 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
     def step(self, action):
         print("===========================")
-        graph = self.current_graph.copy()
-        known_inactive_nodes = np.where(
+        
+        # matching
+        matching_graph = self.current_graph.copy()
+        knowledge_nodes = []
+        if action == 1:
+            known_inactive_nodes = np.where(
                 (self.knowledge <= self.current_step) & 
-                (self.arrivals >= self.current_step) & 
+                (self.arrivals > self.current_step) & 
                 (self.departures > self.current_step)
             )[0]
-
-        if action == 1:
-            for known_node in known_inactive_nodes:
-                # we know that this node is going to arrive, and might want to hold off
-                known_node_range = (self.arrivals[known_node], self.departures[known_node])
-                for node in graph.nodes:
-                    node_range = (self.arrivals[node], self.departures[node])
-                    if self.compat[known_node, node] == 1 and self.compat[node, known_node] == 1:
-                        if do_ranges_overlap(known_node_range, node_range):
-                            print(f"Adding edge between {known_node} and {node} because they are compatible and their ranges ({self.arrivals[known_node]}, {self.departures[known_node]} and {self.arrivals[node]}, {self.departures[node]}) overlap.")
-                            self.current_graph.add_edge(known_node, node)
-
-        matching = nx.max_weight_matching(self.current_graph, maxcardinality=True)
-        for node1, node2 in matching:
-            # are both nodes currently active right now?
-            if self.current_step >= self.arrivals[node1] and self.current_step >= self.arrivals[node2]:
-                nodes = [node1, node2]
+            for node in known_inactive_nodes:
+                matching_graph.add_node(node)
+                for potential_match in range(self.n_agents):
+                    if self.node_indices[potential_match] in self.current_graph.node_indices():
+                        if self.compat[node, potential_match] == 1 and self.compat[potential_match, node] == 1:
+                            node_range = (self.arrivals[node], self.departures[node])
+                            potential_match_range = (self.arrivals[potential_match], self.departures[potential_match])
+                            if do_ranges_overlap(node_range, potential_match_range):
+                                self.node_indices[node] = matching_graph.add_node(node)
+                                knowledge_nodes.append(node)
+                                matching_graph.add_edge(self.node_indices[node], self.node_indices[potential_match], 1)
+        
+        matching = rx.max_weight_matching(matching_graph, max_cardinality=True)
+        for a_index, b_index in matching:
+            a = np.where(self.node_indices == a_index)[0][0]
+            b = np.where(self.node_indices == b_index)[0][0]
+            print(f"Matching {self.get_node_string(a)} with {self.get_node_string(b)}")
+            if self.active_agents[a] and self.active_agents[b]:
+                nodes = [a, b]
                 for node in nodes:
-                    self.matched_agents[node] = True
+                    self.matched_agents[node] = 1
                     self.time_matched[node] = self.current_step
                     self.active_agents[node] = 0
-                    self.current_graph.remove_node(node)
-                print(f"Matched: {self.get_node_string(node1)}, {self.get_node_string(node2)} at {self.current_step}")
+                    self.current_graph.remove_node(self.node_indices[node])
+                    self.node_indices[node] = -1
+                print(f"Matched {self.get_node_string(a)} with {self.get_node_string(b)}")
             else:
-                print(f"It's optimal to match: {self.get_node_string(node1)}, {self.get_node_string(node2)} at {self.current_step} but they are not both active right now.")
+                print(f"Cannot match {self.get_node_string(a)} with {self.get_node_string(b)} because one of them is inactive at {self.current_step}")
+        
+        # fix the node indices for the knowledge nodes
+        self.node_indices[knowledge_nodes] = -1
 
-        if action == 1:
-            for known_node in known_inactive_nodes:
-                if known_node in self.current_graph.nodes:
-                    self.current_graph.remove_node(known_node)
-                
-
-        # current graph
-        for arrival_node in np.where(self.arrivals == self.current_step)[0]:
-            self.active_agents[arrival_node] = 1
-            for compat_node in range(self.n_agents):
-                if self.compat[arrival_node, compat_node] == 1:
-                    if self.compat[compat_node, arrival_node] == 1:
-                        if compat_node in self.current_graph.nodes:
-                            print(f"Adding edge between arrival {self.get_node_string(arrival_node)} and compat {self.get_node_string(compat_node)} because they are compatible.")
-                            self.current_graph.add_edge(arrival_node, compat_node)
+        # arrivals
+        arriving_nodes = np.where(self.arrivals == self.current_step)[0]
+        for node in arriving_nodes:
+            self.node_indices[node] = self.current_graph.add_node(node)
+            self.active_agents[node] = 1
+            for potential_match in range(self.n_agents):
+                if self.node_indices[potential_match] in self.current_graph.node_indices():
+                    if self.compat[node, potential_match] == 1 and self.compat[potential_match, node] == 1:
+                        self.current_graph.add_edge(self.node_indices[node], self.node_indices[potential_match], 1)
+                        print(f"Adding edge between {self.get_node_string(node)} and {self.get_node_string(potential_match)}")
 
         # departures
-        for depart_node in np.where(self.departures == self.current_step)[0]:
-            self.active_agents[depart_node] = 0
-            if depart_node in self.current_graph.nodes:
-                self.current_graph.remove_node(depart_node)
+        departing_nodes = np.where(self.departures == self.current_step)[0]
+        for node in departing_nodes:
+            if not self.matched_agents[node]:
+                self.active_agents[node] = 0
+                self.matched_agents[node] = 0
+                self.current_graph.remove_node(self.node_indices[node])
+                self.node_indices[node] = -1
+                print(f"Node {self.get_node_string(node)} departed at {self.current_step}")
+
 
         self.current_step += 1
 
