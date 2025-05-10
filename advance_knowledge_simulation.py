@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-import networkx as nx
+import rustworkx as rx
 from rustworkx.visualization import mpl_draw
 from typing import Optional
 from gymnasium.spaces import Discrete, MultiBinary, Dict, Box
@@ -15,15 +15,16 @@ seed = 42
 random.seed(seed)
 np.random.seed(seed)
 
-num_envs = 32
+num_envs = 1
 
 n_agents = 100
 n_timesteps = 128
-death_time = 16
+death_time = 32
 p = 0.037
 q = 0.087
 pct_hard = 0.6
-warning_means = [4, 8, 16]
+# warning_means = [1, 2, 3, 4]
+warning_means = [1]
 
 title_name = f"n_agents={n_agents}, n_timesteps={n_timesteps}, death_time={death_time}, p={p}, q={q}, pct_hard={pct_hard}, n={num_envs}"
 sluggified = slugify(title_name)
@@ -40,7 +41,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         p: float = 0.037,
         q: float = 0.087,
         pct_hard: float = 0.6,
-        warning_mean: int = 8, # when you know that someone is probably going to join the kidney exchange
+        warning_mean: int = 0, # when you know that someone is probably going to join the kidney exchange
         seed: Optional[int] = None
     ):
         super(AdvanceKnowledgeSimulationEnvironment, self).__init__()
@@ -66,17 +67,15 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         self.seed = seed
         super().reset(seed=seed)
 
-        self.arrivals = np.zeros(self.n_agents, dtype=int)
-        inter_arrival_times = self.np_random.exponential(1.0, size=self.n_agents)
-        self.arrivals = np.cumsum(inter_arrival_times).astype(int)
-        self.arrivals = np.clip(self.arrivals, 0, self.n_timesteps - 1)
+        # Steadily add agents so that all n_agents arrive evenly spaced over (n_timesteps - death_time)
+        self.arrivals = np.linspace(0, self.n_timesteps - self.death_time, self.n_agents).astype(int)
         # print("Arrival times: ", self.arrivals)
 
-        knowledge_time = self.np_random.exponential(self.warning_mean, size=self.n_agents)
+        knowledge_time = self.np_random.exponential(1, size=self.n_agents) * self.warning_mean
         self.knowledge = np.clip(self.arrivals - knowledge_time, 0, self.n_timesteps - 1).astype(int)
         # print("Knowledge times: ", self.knowledge)
 
-        time_in_exchange = np.random.exponential(self.death_time, size=self.n_agents)
+        time_in_exchange = self.np_random.exponential(self.death_time, size=self.n_agents)
         # print("Time in exchange: ", time_in_exchange)
         self.departures = np.clip(self.arrivals + time_in_exchange, 0, self.n_timesteps - 1).astype(int)
         # print("Departure times: ", self.departures)
@@ -105,11 +104,15 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         self.current_step = 0
 
         # waiting graph, current graph
-        self.current_graph = nx.Graph()
+        self.current_graph = rx.PyGraph()
 
         return self._get_observation(), {}
 
+    def get_node_string(self, node):
+        return f"node {node} (arrival: {self.arrivals[node]}, departure: {self.departures[node]}, knowledge: {self.knowledge[node]})"
+
     def step(self, action):
+        print("===========================")
         graph = self.current_graph.copy()
         known_inactive_nodes = np.where(
                 (self.knowledge <= self.current_step) & 
@@ -125,19 +128,22 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                     node_range = (self.arrivals[node], self.departures[node])
                     if self.compat[known_node, node] == 1 and self.compat[node, known_node] == 1:
                         if do_ranges_overlap(known_node_range, node_range):
+                            print(f"Adding edge between {known_node} and {node} because they are compatible and their ranges ({self.arrivals[known_node]}, {self.departures[known_node]} and {self.arrivals[node]}, {self.departures[node]}) overlap.")
                             self.current_graph.add_edge(known_node, node)
 
         matching = nx.max_weight_matching(self.current_graph, maxcardinality=True)
         for node1, node2 in matching:
             # are both nodes currently active right now?
-            if self.current_step > self.arrivals[node1] and self.current_step > self.arrivals[node2]:
+            if self.current_step >= self.arrivals[node1] and self.current_step >= self.arrivals[node2]:
                 nodes = [node1, node2]
                 for node in nodes:
-                    self.matched_agents[node] = 1
+                    self.matched_agents[node] = True
                     self.time_matched[node] = self.current_step
                     self.active_agents[node] = 0
-                    if node in self.current_graph.nodes:
-                        self.current_graph.remove_node(node)
+                    self.current_graph.remove_node(node)
+                print(f"Matched: {self.get_node_string(node1)}, {self.get_node_string(node2)} at {self.current_step}")
+            else:
+                print(f"It's optimal to match: {self.get_node_string(node1)}, {self.get_node_string(node2)} at {self.current_step} but they are not both active right now.")
 
         if action == 1:
             for known_node in known_inactive_nodes:
@@ -148,11 +154,11 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         # current graph
         for arrival_node in np.where(self.arrivals == self.current_step)[0]:
             self.active_agents[arrival_node] = 1
-            self.current_graph.add_node(arrival_node)
             for compat_node in range(self.n_agents):
                 if self.compat[arrival_node, compat_node] == 1:
                     if self.compat[compat_node, arrival_node] == 1:
-                        if arrival_node in self.current_graph.nodes:
+                        if compat_node in self.current_graph.nodes:
+                            print(f"Adding edge between arrival {self.get_node_string(arrival_node)} and compat {self.get_node_string(compat_node)} because they are compatible.")
                             self.current_graph.add_edge(arrival_node, compat_node)
 
         # departures
@@ -215,7 +221,7 @@ for env in tqdm(envs):
     rewards["regular"].append(regular_reward)
     ratios["regular"].append(1)
 
-    print("Regular reward: ", regular_reward)
+    print(f"Regular reward: {regular_reward:.4f}")
 
     for warning_mean in tqdm(warning_means, leave=False):
         env.warning_mean = warning_mean
@@ -227,7 +233,7 @@ for env in tqdm(envs):
             ratios[f"warning_mean_{warning_mean}"] = []
 
         waiting_reward = env.compute_reward(use_waiting_graph=True)
-        print("Waiting reward: ", warning_mean, waiting_reward)
+        print(f"Waiting reward for mean {warning_mean}: {waiting_reward:.4f}")
         rewards[f"warning_mean_{warning_mean}"].append(waiting_reward)
         ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 0)
 
@@ -242,7 +248,7 @@ plt.boxplot(
 )
 plt.ylabel("Reward")
 plt.title("Reward Distribution for Different Warning Means")
-plt.savefig(f"{results_dir}/reward_boxplot.png")
+plt.savefig(f"{results_dir}/reward_boxplot_{sluggified}.png")
 plt.close()
 
 # Plot the ratios
