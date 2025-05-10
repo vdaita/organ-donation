@@ -1,7 +1,6 @@
 import gymnasium as gym
 import numpy as np
-import rustworkx as rx
-from rustworkx.visualization import mpl_draw
+import networkx as nx
 from typing import Optional
 from gymnasium.spaces import Discrete, MultiBinary, Dict, Box
 from tqdm import tqdm
@@ -11,11 +10,11 @@ from rich import print
 import random
 from slugify import slugify
 
-seed = 42
+seed = 24
 random.seed(seed)
 np.random.seed(seed)
 
-num_envs = 1
+num_envs = 8
 
 n_agents = 100
 n_timesteps = 128
@@ -23,8 +22,8 @@ death_time = 32
 p = 0.037
 q = 0.087
 pct_hard = 0.6
-# warning_means = [1, 2, 3, 4]
-warning_means = [1]
+warning_means = [1, 2, 3, 4]
+# warning_means = [1]
 
 title_name = f"n_agents={n_agents}, n_timesteps={n_timesteps}, death_time={death_time}, p={p}, q={q}, pct_hard={pct_hard}, n={num_envs}"
 sluggified = slugify(title_name)
@@ -103,7 +102,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
         self.current_step = 0
 
-        self.current_graph = rx.PyGraph()
+        self.current_graph = nx.Graph()
         self.node_indices = np.ones(self.n_agents, dtype=int) * -1 # why? i'd rather throw an error if the node is not in the graph rather than deal with unexpected behavior
 
         return self._get_observation(), {}
@@ -112,7 +111,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
         return f"node {node} (arrival: {self.arrivals[node]}, departure: {self.departures[node]}, knowledge: {self.knowledge[node]})"
 
     def step(self, action):
-        print("===========================")
+        # print("===========================")
         
         # matching
         matching_graph = self.current_graph.copy()
@@ -124,7 +123,6 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                 (self.departures > self.current_step)
             )[0]
             for node in known_inactive_nodes:
-                matching_graph.add_node(node)
                 for potential_match in range(self.n_agents):
                     if self.node_indices[potential_match] in self.current_graph.node_indices():
                         if self.compat[node, potential_match] == 1 and self.compat[potential_match, node] == 1:
@@ -136,10 +134,10 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                                 matching_graph.add_edge(self.node_indices[node], self.node_indices[potential_match], 1)
         
         matching = rx.max_weight_matching(matching_graph, max_cardinality=True)
-        for a_index, b_index in matching:
-            a = np.where(self.node_indices == a_index)[0][0]
-            b = np.where(self.node_indices == b_index)[0][0]
-            print(f"Matching {self.get_node_string(a)} with {self.get_node_string(b)}")
+        for a, b in matching:
+            # a = np.where(self.node_indices == a_index)[0][0]
+            # b = np.where(self.node_indices == b_index)[0][0]
+            # print(f"Matching {self.get_node_string(a)} with {self.get_node_string(b)}")
             if self.active_agents[a] and self.active_agents[b]:
                 nodes = [a, b]
                 for node in nodes:
@@ -151,6 +149,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                 print(f"Matched {self.get_node_string(a)} with {self.get_node_string(b)}")
             else:
                 print(f"Cannot match {self.get_node_string(a)} with {self.get_node_string(b)} because one of them is inactive at {self.current_step}")
+                ...
         
         # fix the node indices for the knowledge nodes
         self.node_indices[knowledge_nodes] = -1
@@ -232,6 +231,7 @@ for env in tqdm(envs):
     ratios["regular"].append(1)
 
     print(f"Regular reward: {regular_reward:.4f}")
+    print("Matched values: ", np.where(env.matched_agents == 1)[0])
 
     for warning_mean in tqdm(warning_means, leave=False):
         env.warning_mean = warning_mean
@@ -245,7 +245,9 @@ for env in tqdm(envs):
         waiting_reward = env.compute_reward(use_waiting_graph=True)
         print(f"Waiting reward for mean {warning_mean}: {waiting_reward:.4f}")
         rewards[f"warning_mean_{warning_mean}"].append(waiting_reward)
-        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 0)
+        ratios[f"warning_mean_{warning_mean}"].append(waiting_reward / regular_reward if regular_reward > 0 else 1)
+
+        print("Matched values: ", np.where(env.matched_agents == 1)[0])
 
 # Plotting the results
 results_dir = "results/advance_knowledge"
