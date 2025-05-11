@@ -14,17 +14,17 @@ seed = 24
 random.seed(seed)
 np.random.seed(seed)
 
-num_envs = 1
+num_envs = 50
 
-n_agents = 400
+n_agents = 200
 n_timesteps = 128
 death_time = 48
 p = 0.037
 q = 0.087
 pct_hard = 0.7
-warning_means = [4, 8, 16, 24, 32, 48]
+warning_means = [4, 8, 16, 32]
 
-strategy = "continuous"
+strategy = "continuous" # continuous, greedy
 # could be: greedy
 # could be: greedy with check
 
@@ -146,6 +146,11 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
                     self.matched_agents[node2] = 1
                     self.time_matched[node1] = self.current_step
                     self.time_matched[node2] = self.current_step
+            elif strategy == "greedy":
+                self.matched_agents[node1] = 1
+                self.matched_agents[node2] = 1
+                self.time_matched[node1] = np.max([self.current_step, self.arrivals[node1], self.arrivals[node2]])
+                self.time_matched[node2] = np.max([self.current_step, self.arrivals[node1], self.arrivals[node2]])
             
                 # print(f"Matched: {self.get_node_string(node1)} and {self.get_node_string(node2)} in step: {self.current_step}")
             # else:
