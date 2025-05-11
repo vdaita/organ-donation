@@ -85,4 +85,5 @@ if __name__ == "__main__":
     plt.ylabel("Reward Ratio")
     plt.title("Reward Ratios by Strategy")
     plt.grid(axis='y')
+    plt.savefig("results/simulated_patient.png")
     plt.show()

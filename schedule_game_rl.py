@@ -8,11 +8,11 @@ from scipy.stats import gmean
 import random
 import matplotlib.pyplot as plt
 import os
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
-import argparse
+import time
 
 seed = 42
 np.random.seed(seed)
@@ -28,26 +28,36 @@ args = parser.parse_args()
 n_agents = 100
 n_timesteps = 64
 death_time = 32
-p = 0.3
+p = 0.07
 q = 0.15
-pct_hard = args.pct_hard
+pct_hard = 0.7
 
 # Training and evaluation parameters
 num_envs = 16
-num_eval_envs = 128
+num_eval_envs = 4
 eval_freq = 2048
 total_timesteps = 2000000
 
-# Determine if negative rewards should be used or not
-use_negative_rewards = args.use_negative_rewards
+use_cycles = False
 
-folder_name = f"results/"
-if use_negative_rewards:
-    folder_name += "with_negative_rewards_"
+results_folder = "results/"
+pct_hard_int = int(pct_hard * 100)
+
+p_str = str(p).replace(".", "_")
+q_str = str(q).replace(".", "_")
+
+time_now = time.time()
+
+results_folder += f"dqn_{time_now}_n_agents_{n_agents}_n_timesteps_{n_timesteps}_death_time_{death_time}_pct_hard_{pct_hard_int}_p_{p_str}_q_{q_str}"
+if use_cycles:
+    results_folder += "_use_cycles/"
 else:
-    folder_name += "no_negative_rewards_"
-hard_pct_num = (int) (pct_hard * 100)
-folder_name += f"p_{p}_q_{q}_pct_hard_{hard_pct_num}/"
+    results_folder += "_no_cycles/"
+
+os.makedirs(results_folder, exist_ok=True)
+title_description = f"{n_agents} agents, {n_timesteps} timesteps, {death_time} death time, {pct_hard_int}% hard, {p:.2f} p, {q:.2f} q"
+if use_cycles:
+    title_description += " (with cycles)"
 
 # Create environment seeds
 env_seeds = np.random.randint(0, 2**32 - 1, size=num_envs).tolist()
@@ -133,7 +143,7 @@ class FlatKidneyDonationEnvWrapper(gym.Wrapper):
         # Return flattened observation
         flat_obs = self._simplify_and_flatten_observation(self._full_obs)
         
-        return flat_obs, reward, done, truncated, info
+        return flat_obs, reward, done, truncated, truncated
     
     def reset(self, **kwargs):
         obs, info = self.env.start_over()
@@ -191,7 +201,7 @@ def make_env(seed, rank=0):
             p=p,
             q=q,
             pct_hard=pct_hard,
-            use_negative_rewards=use_negative_rewards
+            use_cycles=use_cycles
         )
         env = FlatKidneyDonationEnvWrapper(env)
         env = Monitor(env)
@@ -232,7 +242,7 @@ class KidneyMatchingEvalCallback(BaseCallback):
             if self.verbose > 0:
                 print(f"New best mean reward ratio: {mean_ratio:.4f}")
             # Save best model
-            path = os.path.join(folder_name, "best_kidney_model_flat")
+            path = os.path.join(results_folder, "best_kidney_model_flat")
             self.model.save(path)
         
         if self.verbose > 0:
@@ -272,10 +282,7 @@ def describe_performance(performance):
 
 if __name__ == "__main__":
     # Create results directory if it doesn't exist
-    os.makedirs(folder_name, exist_ok=True)
-    attribute_title = f"p: {p}, q: {q}, percentage hard: {hard_pct_num}, agents: {n_agents}"
-    if use_negative_rewards:
-        attribute_title += ", incl. negative rewards"
+    os.makedirs(results_folder, exist_ok=True)
     
     # Create vectorized environments for training
     # Using DummyVecEnv instead of SubprocVecEnv for better error reporting
@@ -292,59 +299,43 @@ if __name__ == "__main__":
                 p=p,
                 q=q,
                 pct_hard=pct_hard,
-                use_negative_rewards=use_negative_rewards
+                use_cycles=use_cycles
             )
         )
         for i in eval_env_seeds
     ]
     
-    # Get greedy rewards for evaluation comparison
-    eval_greedy_rewards = []
-    eval_greedy_hard_waiting_times = []
-    eval_greedy_easy_waiting_times = []
-
-    for env in tqdm(eval_envs, desc="Computing greedy baselines"):
-        percentage, hard_waiting_times, easy_waiting_times = env.env.get_greedy_percentage()
-        eval_greedy_rewards.append(percentage)
-        eval_greedy_hard_waiting_times.extend(hard_waiting_times)
-        eval_greedy_easy_waiting_times.extend(easy_waiting_times)
-
-    eval_greedy_rewards = np.array(eval_greedy_rewards)
-    eval_greedy_hard_waiting_times = np.array(eval_greedy_hard_waiting_times)
-    eval_greedy_easy_waiting_times = np.array(eval_greedy_easy_waiting_times)
-    
-    # Get patient rewards for evaluation comparison
-    eval_patient_rewards = []
-    eval_patient_hard_waiting_times = []
-    eval_patient_easy_waiting_times = []
-
-    for env in tqdm(eval_envs, desc="Computing patient baselines"):
-        percentage, hard_waiting_times, easy_waiting_times = env.env.get_patient_percentage()
-        eval_patient_rewards.append(percentage)
-        eval_patient_hard_waiting_times.extend(hard_waiting_times)
-        eval_patient_hard_waiting_times.extend(easy_waiting_times)
-
-    eval_patient_rewards = np.array(eval_patient_rewards)
-    
+  
     # Define model
-    model = PPO(
+    model = DQN(
         policy="MlpPolicy",  # For flat vectors
         env=vec_env,
         learning_rate=3e-4,
-        n_steps=2048,
         batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        clip_range_vf=None,
-        normalize_advantage=True,
-        ent_coef=0.01,  # Add some exploration
-        vf_coef=0.5,
-        max_grad_norm=0.5,
         verbose=1,
         seed=seed
     )
+
+      # Get greedy rewards for evaluation comparison
+    eval_greedy_rewards = []
+    eval_hard_waiting_times_greedy, eval_easy_waiting_times_greedy = [], []
+    for env in tqdm(eval_envs, desc="Computing greedy baselines"):
+        eval_greedy_rewards.append(env.env.get_greedy_percentage())
+        eval_hard_waiting_times_greedy.extend(env.env.get_hard_waiting_time())
+        eval_easy_waiting_times_greedy.extend(env.env.get_easy_waiting_time())
+    eval_greedy_rewards = np.array(eval_greedy_rewards)
+    eval_hard_waiting_times_greedy, eval_easy_waiting_times_greedy = np.array(eval_hard_waiting_times_greedy), np.array(eval_easy_waiting_times_greedy)
+    
+    # Get patient rewards for evaluation comparison
+    eval_patient_rewards = []
+    eval_hard_waiting_times_patient, eval_easy_waiting_times_patient = [], []
+    for env in tqdm(eval_envs, desc="Computing patient baselines"):
+        eval_patient_rewards.append(env.env.get_patient_percentage())
+        eval_hard_waiting_times_patient.extend(env.env.get_hard_waiting_time()) 
+        eval_easy_waiting_times_patient.extend(env.env.get_easy_waiting_time())
+    eval_hard_waiting_times_patient, eval_easy_waiting_times_patient = np.array(eval_hard_waiting_times_patient), np.array(eval_easy_waiting_times_patient)
+    eval_patient_rewards = np.array(eval_patient_rewards)
+    
     
     # Setup evaluation callback
     eval_callback = KidneyMatchingEvalCallback(
@@ -361,10 +352,10 @@ if __name__ == "__main__":
     )
     
     # Save the final model
-    model.save(f"{folder_name}/final_kidney_model_flat")
+    model.save(f"{results_folder}/final_kidney_model_flat")
     
     # Load the best model for final evaluation
-    best_model = PPO.load(f"{folder_name}/best_kidney_model_flat")
+    best_model = PPO.load(f"{results_folder}/best_kidney_model_flat")
     
     # Perform final evaluation
     model_rewards = evaluate_solution(best_model, eval_envs, eval_greedy_rewards)
@@ -372,16 +363,11 @@ if __name__ == "__main__":
     # Calculate ratios compared to greedy and patient methods
     greedy_ratios = model_rewards
     patient_ratios = np.array([np.sum(env.env.matched_agents) / env.env.n_agents for env in eval_envs]) / eval_patient_rewards
-
-    model_hard_waiting_times = []
-    model_easy_waiting_times = []
-    for env in eval_envs:
-        hard_waiting_times, easy_waiting_times = env.env.get_waiting_time()
-        model_hard_waiting_times.extend(hard_waiting_times)
-        model_easy_waiting_times.extend(easy_waiting_times)
-    model_hard_waiting_times = np.array(model_hard_waiting_times)
-    model_easy_waiting_times = np.array(model_easy_waiting_times)
-
+    theoretical_max_ratios = np.array([np.sum(env.env.matched_agents) / env.env.n_agents for env in eval_envs]) / np.array([env.env.calculate_theoretical_max() for env in eval_envs])
+    
+    model_easy_waiting_times = np.concat([env.env.get_easy_waiting_time() for env in eval_envs])
+    model_hard_waiting_times = np.concat([env.env.get_hard_waiting_time() for env in eval_envs])
+    
     print("Evaluation against greedy strategy:")
     describe_performance(greedy_ratios)
     
@@ -389,59 +375,58 @@ if __name__ == "__main__":
     describe_performance(patient_ratios)
     
     # Plot both comparisons
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(20, 6))
     
     plt.subplot(1, 2, 1)
-    plt.title(f"Model vs Greedy Strategy, {attribute_title}")
+    plt.title(f"Model vs Greedy Strategy\n{title_description}")
     plt.boxplot(greedy_ratios)
     plt.ylabel("Performance Ratio")
     plt.grid(axis='y')
     
     plt.subplot(1, 2, 2)
-    plt.title(f"Model vs Patient Strategy, {attribute_title}")
+    plt.title(f"Model vs Patient Strategy\n{title_description}")
     plt.boxplot(patient_ratios)
     plt.ylabel("Performance Ratio")
     plt.grid(axis='y')
     
     plt.tight_layout()
-    plt.savefig(f"{folder_name}/rl_performance_comparisons.png")
+    plt.savefig(f"{results_folder}/rl_performance_comparisons.png")
     
-    # Also include the original plot for backward compatibility
     plt.figure()
-    plt.title(f"Flattened Model Performance Ratios (vs Greedy), {attribute_title}")
+    plt.title(f"Flattened Model Performance Ratios (vs Greedy)\n{title_description}")
     plt.boxplot(greedy_ratios)
-    plt.savefig(f"{folder_name}/rl_schedule_ratios_flat.png")
+    plt.savefig(f"{results_folder}/rl_schedule_ratios_flat.png")
     
-    # Plot with both methods for comparison
     plt.figure(figsize=(10, 6))
-    plt.boxplot([greedy_ratios, patient_ratios], labels=["vs Greedy", "vs Patient"])
-    plt.title(f"Model Performance vs Different Strategies, {attribute_title}")
+    plt.boxplot([greedy_ratios, patient_ratios, theoretical_max_ratios], labels=["vs Greedy", "vs Patient", "vs Theoretical Max"])
+    plt.title(f"Model Performance vs Different Strategies\n{title_description}")
     plt.ylabel("Performance Ratio")
     plt.grid(axis='y')
-    plt.savefig(f"{folder_name}/rl_combined_comparison.png")
+    plt.savefig(f"{results_folder}/rl_combined_comparison.png")
 
-    # Can you graph charts with the waiting times? The waiting times are an array of arrays where each subarray is the list of waiting times for the agnets in the evironment
-
-    # Plot waiting times for greedy and patient strategies (hard and easy)
-    plt.figure(figsize=(14, 6))
+    plt.figure(figsize=(12, 6))
     plt.boxplot(
         [
-            eval_greedy_hard_waiting_times,
-            eval_greedy_easy_waiting_times,
-            eval_patient_hard_waiting_times,
-            eval_patient_easy_waiting_times,
-            model_hard_waiting_times,
-            model_easy_waiting_times
+            eval_easy_waiting_times_greedy,
+            eval_easy_waiting_times_patient,
+            model_easy_waiting_times,
+            eval_hard_waiting_times_greedy,
+            eval_hard_waiting_times_patient,
+            model_hard_waiting_times
         ],
         labels=[
-            "Hard (Greedy)", "Easy (Greedy)",
-            "Hard (Patient)", "Easy (Patient)",
-            "Hard (Model)", "Easy (Model)"
+            "Easy-Greedy",
+            "Easy-Patient",
+            "Easy-Model",
+            "Hard-Greedy",
+            "Hard-Patient",
+            "Hard-Model"
         ]
     )
-    plt.title(f"Waiting Times Comparison Across Strategies, {attribute_title}")
+    plt.title(f"Waiting Times Comparison\n{title_description}")
     plt.ylabel("Waiting Time")
     plt.grid(axis='y')
     plt.tight_layout()
-    plt.savefig(f"{folder_name}/waiting_times_all_strategies.png")
+    plt.savefig(f"{results_folder}/waiting_times_comparison.png")
+    
     plt.show()
