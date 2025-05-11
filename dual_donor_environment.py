@@ -32,7 +32,7 @@ can_give = {
     4: [1, 2, 3, 4]
 }
 
-n_agents = 50
+n_agents = 25
 
 def get_random_blood_type():
     return np.random.choice(list(blood_type_distribution.keys()), p=list(blood_type_distribution.values()))
@@ -159,10 +159,12 @@ def score_permutation(solution, groupings):
     # Return the fraction of triplets matched out of total triplets
     return total_triplets_matched / (n_agents if n_agents > 0 else 1)
 
-def score_toggles(solution, groupings):
+def score_toggles(solution, groupings, penalty=True):
     # Create a matched array with the size of triplets (n_agents), not groupings
     matched = set()
     total_triplets_matched = 0
+
+    overdone = 0
     
     for used, group in zip(solution, groupings):
         if used:
@@ -171,7 +173,7 @@ def score_toggles(solution, groupings):
             for triplet in group:
                 if triplet in matched:
                     group_valid = False
-                    break
+                    overdone += 1
             
             # If no conflicts, mark all triplets in this group as matched
             if group_valid:
@@ -180,34 +182,78 @@ def score_toggles(solution, groupings):
                 total_triplets_matched += len(group)
     
     # Return the fraction of triplets matched
-    return total_triplets_matched / (n_agents if n_agents > 0 else 1)
+    if penalty == False:
+        overdone = 0
+    return (total_triplets_matched - overdone) / (n_agents if n_agents > 0 else 1)
 
-def generate_solutions_toggles(solutions, groupings, scores, elitism_keep=5, num_changes=5, pop_size=50):
-    # Keep best solutions from previous generation
-    elite_indices = np.argsort(scores)[-elitism_keep:]
-    new_solutions = [solutions[i] for i in elite_indices]
-    new_scores = [scores[i] for i in elite_indices]
+def roulette_wheel_selection(solutions, scores, k):
+    """
+    Selects k solutions from the population using roulette wheel selection.
     
-    # Generate new solutions
+    Args:
+        solutions: List of candidate solutions
+        scores: List of fitness scores corresponding to each solution
+        k: Number of solutions to select
+        
+    Returns:
+        Tuple of (selected solutions, their scores)
+    """
+    # Handle negative scores by shifting all scores to be non-negative
+    min_score = min(scores)
+    adjusted_scores = np.array(scores)
+    if min_score < 0:
+        adjusted_scores = adjusted_scores - min_score + 1e-10
+    
+    # Calculate selection probabilities
+    total_fitness = sum(adjusted_scores)
+    selection_probs = adjusted_scores / total_fitness if total_fitness > 0 else np.ones(len(scores)) / len(scores)
+    
+    # Select k solutions using the calculated probabilities
+    selected_indices = np.random.choice(len(solutions), size=k, replace=False, p=selection_probs)
+    
+    selected_solutions = [solutions[i] for i in selected_indices]
+    selected_scores = [scores[i] for i in selected_indices]
+    
+    return selected_solutions, selected_scores
+
+def generate_solutions_toggles(solutions, groupings, scores, parent_keep=5, pop_size=50):
+    # tournament select parents
+    best_solutions, best_scores = roulette_wheel_selection(solutions, scores, parent_keep)
+
+    # cross over
+    new_solutions = best_solutions.copy()
+    new_scores = best_scores.copy()
+
     while len(new_solutions) < pop_size:
-        parent_idx = np.random.choice(len(solutions), p=np.maximum(scores, 0)/max(sum(np.maximum(scores, 0)), 1e-10))
-        child = toggle_elements(solutions[parent_idx], num_changes)
-        child_score = score_toggles(child, groupings)
-        new_solutions.append(child)
-        new_scores.append(child_score)
+        i = np.random.randint(0, len(best_solutions))
+        j = np.random.randint(0, len(best_solutions))
+        if i != j:
+            crossover_point = np.random.randint(0, len(best_solutions[i]))
+            child = np.concatenate((best_solutions[i][:crossover_point], best_solutions[j][crossover_point:]))
+            child_score = score_toggles(child, groupings, penalty=True)
+            new_solutions.append(child)
+            new_scores.append(child_score)
+
+    
+    # Generate new solutions (mutate): "mutation method for this algorithm is the uniform bit-flip"
+    for i in range(parent_keep, len(new_solutions)):
+        for j in range(len(new_solutions[i])):
+            if np.random.rand() < (1 / len(new_solutions[i])):
+                new_solutions[i][j] = 1 - new_solutions[i][j]
     
     return new_solutions, new_scores
 
-def generate_solution_permutations(solutions, groupings, scores, elitism_keep=5, num_changes=5, pop_size=50):
-    # Keep best solutions from previous generation
-    elite_indices = np.argsort(scores)[-elitism_keep:]
-    new_solutions = [solutions[i] for i in elite_indices]
-    new_scores = [scores[i] for i in elite_indices]
-    
-    # Generate new solutions
+def generate_solution_permutations(solutions, groupings, scores, parent_keep=5, num_changes=1, pop_size=50):
+    # select parents
+    best_solutions, best_scores = roulette_wheel_selection(solutions, scores, parent_keep)    
+
+    new_solutions = best_solutions.copy()
+    new_scores = best_scores.copy()
+
+    # mutate
     while len(new_solutions) < pop_size:
-        parent_idx = np.random.choice(len(solutions), p=np.maximum(scores, 0)/max(sum(np.maximum(scores, 0)), 1e-10))
-        child = permute_grouping(solutions[parent_idx], num_changes)
+        parent_idx = np.random.choice(len(best_solutions))
+        child = permute_grouping(best_solutions[parent_idx], num_changes)
         child_score = score_permutation(child, groupings)
         new_solutions.append(child)
         new_scores.append(child_score)
@@ -217,7 +263,7 @@ def generate_solution_permutations(solutions, groupings, scores, elitism_keep=5,
 
 if __name__ == "__main__":
     # Create environments
-    num_environments = 16  # Changed from 5 to 16 as requested
+    num_environments = 50  # Changed from 5 to 16 as requested
     generations = 50
     environments = [create_environment(n_agents) for _ in range(num_environments)]
     toggle_results = []
@@ -230,10 +276,13 @@ if __name__ == "__main__":
         
         # Optimize with toggles
         toggle_solutions = [np.random.randint(0, 2, size=len(groupings)) for _ in range(50)]
-        toggle_scores = [score_toggles(sol, groupings) for sol in toggle_solutions]
+        toggle_scores = [score_toggles(sol, groupings, penalty=True) for sol in toggle_solutions]
         for _ in tqdm(range(generations), desc="Toggle generations"):
             toggle_solutions, toggle_scores = generate_solutions_toggles(toggle_solutions, groupings, toggle_scores)
-        toggle_results.append(max(toggle_scores))
+
+        reevaluated_toggle_scores = [score_toggles(sol, groupings, penalty=False) for sol in toggle_solutions]
+
+        toggle_results.append(max(reevaluated_toggle_scores))
         
         # Optimize with permutations
         perm_solutions = [np.random.permutation(len(groupings)) for _ in range(50)]
@@ -242,6 +291,7 @@ if __name__ == "__main__":
             perm_solutions, perm_scores = generate_solution_permutations(perm_solutions, groupings, perm_scores)
         permutation_results.append(max(perm_scores))
     
+
     # Aggregate results
     print(f"Toggle method average: {np.mean(toggle_results):.4f}")
     print(f"Permutation method average: {np.mean(permutation_results):.4f}")
@@ -270,4 +320,15 @@ if __name__ == "__main__":
     
     plt.tight_layout()
     plt.savefig('results/dual_donor_optimization_comparison.png')
+
+    # Boxplot of results
+    fig2, ax2 = plt.subplots(figsize=(8, 6))
+    ratio = np.array(permutation_results) / np.array(toggle_results)
+    ax2.boxplot([ratio], labels=['Permutation / Toggle Method Results'])
+    ax2.set_ylabel('Relative Performance (Ratio of Permutation to Toggle)')
+    ax2.set_title('Ratio Boxplot for Dual Donor Genetic Algorithm Methods')
+    plt.tight_layout()
+    plt.savefig('results/dual_donor_optimization_boxplot.png')
+
+
     plt.show()
