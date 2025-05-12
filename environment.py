@@ -58,6 +58,7 @@ class PairedKidneyDonationEnv(gym.Env):
         easy_indices = np.setdiff1d(np.arange(self.n_agents), hard_indices)
 
         random_values = self.np_random.random((self.n_agents, self.n_agents))
+        random_values = np.triu(random_values, k=1) + np.triu(random_values, k=1).T  # Make it symmetric
 
         # Fill compatibility matrix based on hard/easy matching criteria
         self.compatibility[np.ix_(hard_indices, easy_indices)] = random_values[np.ix_(hard_indices, easy_indices)] < self.p  # Hard-to-Easy
@@ -67,12 +68,7 @@ class PairedKidneyDonationEnv(gym.Env):
         self.compatibility[np.arange(self.n_agents), np.arange(self.n_agents)] = 0 # no self-compatibility
 
         # Generate arrivals using exponential distribution
-        self.arrival_times = np.zeros(self.n_agents, dtype=int)
-        inter_arrival_times = self.np_random.exponential(1.0/self.arrival_rate, self.n_agents)
-        cumulative_times = np.cumsum(inter_arrival_times)
-        scaled_times = (cumulative_times / np.max(cumulative_times) * (self.n_timesteps * 0.9)).astype(int)
-        self.arrival_times = np.clip(scaled_times, 0, self.n_timesteps-1)
-        self.arrival_times[0] = 0
+        self.arrival_times = np.linspace(0, self.n_timesteps - self.death_time, self.n_agents).astype(int)
         
         # Generate departure times based on arrival times plus criticality duration
         exponential_distributions = self.np_random.exponential(1, (self.n_agents, )) * self.death_time
@@ -474,7 +470,8 @@ class PrioritySelectionPairedKidneyDonationEnv(PairedKidneyDonationEnv):
                     action[i] = 1
             obs, reward, done, _, _ = self.step(action)
         total_reward = np.sum(self.matched_agents) / self.n_agents
-        return total_reward
+
+        return total_reward, self.get_hard_waiting_time(), self.get_easy_waiting_time()
     
     def get_hard_waiting_time(self):
         hard_waiting_times = self.time_matched[self.is_hard_to_match == 1] - self.arrival_times[self.is_hard_to_match == 1]

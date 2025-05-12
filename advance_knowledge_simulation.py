@@ -16,7 +16,7 @@ np.random.seed(seed)
 
 num_envs = 50
 
-n_agents = 200
+n_agents = 300
 n_timesteps = 128
 death_time = 48
 p = 0.037
@@ -92,6 +92,7 @@ class AdvanceKnowledgeSimulationEnvironment(gym.Env):
 
         self.compat = np.zeros((self.n_agents, self.n_agents), dtype=int)
         random_matrix = self.np_random.random((self.n_agents, self.n_agents))
+        random_matrix = np.triu(random_matrix, k=1) + np.triu(random_matrix, k=1).T # makes sure that it's bidirectional/symmetric
 
         # print("Random matrix: ", random_matrix)
 
