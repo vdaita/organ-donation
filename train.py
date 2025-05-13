@@ -81,13 +81,12 @@ class Args:
 
     # environment configurations
     n_agents = 100
-    n_timesteps = 32
-    death_low = 12
-    death_high = 14
+    n_timesteps = 64
+    death_time = 32
     use_cycles = False
-    p = 0.08
-    q = 0.04
-    pct_hard = 0.7
+    p = 0.037
+    q = 0.087
+    pct_hard = 0.66
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -167,7 +166,7 @@ class Agent(nn.Module):
 
         for i in range(num_runs):
             env.reset()
-            greedy_percentage = env.get_greedy_percentage()
+            greedy_percentage, _, _ = env.get_greedy_percentage()
             greedy_percentages.append(greedy_percentage)
 
             obs, info = env.start_over()
@@ -225,7 +224,7 @@ if __name__ == "__main__":
         return PairedKidneyDonationEnv(
             n_agents=args.n_agents,
             n_timesteps=args.n_timesteps,
-            death_range=[args.death_low, args.death_high],
+            death_time=args.death_time,
             use_cycles=args.use_cycles,
             p=args.p,
             q=args.q,

@@ -58,7 +58,8 @@ eval_envs = [
 
 eval_greedy_rewards = []
 for env in tqdm(eval_envs, desc="Evaluation envs"):
-    eval_greedy_rewards.append(env.get_greedy_percentage())
+    pct, _, _ = env.get_greedy_percentage()
+    eval_greedy_rewards.append(pct)
 eval_greedy_rewards = np.array(eval_greedy_rewards)
 
 def translate_number_to_action(number, obs): # number should be from 0 to 2^6 - 1
